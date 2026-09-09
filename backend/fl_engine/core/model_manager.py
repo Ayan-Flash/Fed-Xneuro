@@ -1,16 +1,17 @@
 import copy
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Type
 import torch
 import torch.nn as nn
 from backend.fl_engine.models.base import BaseModel
 from backend.fl_engine.models.registry import ModelRegistry
+from backend.fl_engine.models.connector import ModelConnector
 from backend.fl_engine.utils.serialization import save_state_dict, load_state_dict
 
 
 class ModelManager:
     """
     Central manager for model creation, copying, parameter extraction,
-    and checkpoint saving/loading.
+    and checkpoint saving/loading, with support for external model endpoints.
     """
 
     @staticmethod
@@ -48,9 +49,21 @@ class ModelManager:
     def load_model(
         model: nn.Module,
         file_path: str,
-        device: Optional[torch.device] = None
+        device: Optional[torch.device] = None,
+        strict: bool = True
     ) -> nn.Module:
-        """Loads model weights from a file path."""
-        state = load_state_dict(file_path, device=device)
-        ModelManager.set_parameters(model, state)
-        return model
+        """
+        Loads model weights from a local or external file path via ModelConnector.
+        """
+        return ModelConnector.load_external_weights(model, file_path, device=device, strict=strict)
+
+    @staticmethod
+    def register_external_architecture(
+        file_path: str,
+        class_name: str,
+        register_as: str
+    ) -> Type[nn.Module]:
+        """
+        Connects an external Python model class file to the ModelRegistry.
+        """
+        return ModelConnector.load_external_model_class(file_path, class_name, register_as=register_as)

@@ -99,6 +99,18 @@ def parse_arguments() -> argparse.Namespace:
         "--models-dir", type=str, default=os.path.join(project_root, "models"),
         help="Path for saving global and client model checkpoints"
     )
+    parser.add_argument(
+        "--checkpoint", type=str, default=None, dest="checkpoint_path",
+        help="Path to an existing model checkpoint (.pt / .pth) to resume or initialize training from"
+    )
+    parser.add_argument(
+        "--custom-model-path", type=str, default=None, dest="custom_model_path",
+        help="Path to external Python file containing a custom PyTorch model class"
+    )
+    parser.add_argument(
+        "--custom-model-class", type=str, default=None, dest="custom_model_class",
+        help="Class name of the custom model inside --custom-model-path"
+    )
     return parser.parse_args()
 
 
@@ -130,6 +142,9 @@ def main() -> None:
             results_dir=args.results_dir,
             experiments_dir=args.experiments_dir,
             models_dir=args.models_dir,
+            checkpoint_path=args.checkpoint_path,
+            custom_model_path=args.custom_model_path,
+            custom_model_class=args.custom_model_class,
         )
 
     engine = SimulationEngine(config)

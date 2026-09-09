@@ -38,6 +38,11 @@ class SimulationConfig:
     models_dir: str = "models"
     save_checkpoints: bool = True
 
+    # External Model Connectors / Checkpoints
+    checkpoint_path: Optional[str] = None
+    custom_model_path: Optional[str] = None
+    custom_model_class: Optional[str] = None
+
     # Extra algorithm-specific arguments
     algorithm_kwargs: Dict[str, Any] = field(default_factory=dict)
 

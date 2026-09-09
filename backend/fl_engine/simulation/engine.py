@@ -64,7 +64,20 @@ class SimulationEngine:
             data_stats = data_mgr.get_statistics()
 
             # 2. Global Model Initialization
+            if self.config.custom_model_path and self.config.custom_model_class:
+                print(f"Connecting external model architecture: {self.config.custom_model_class} from {self.config.custom_model_path}", flush=True)
+                ModelManager.register_external_architecture(
+                    file_path=self.config.custom_model_path,
+                    class_name=self.config.custom_model_class,
+                    register_as=self.config.model,
+                )
+
             global_model = ModelManager.create_model(self.config.model)
+
+            # Load external checkpoint if provided
+            if self.config.checkpoint_path:
+                print(f"Loading external model weights from: {self.config.checkpoint_path}", flush=True)
+                ModelManager.load_model(global_model, self.config.checkpoint_path, device=self.device)
 
             # 3. Client Creation
             clients = []

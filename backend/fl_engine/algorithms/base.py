@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
 import torch
 
@@ -11,6 +11,7 @@ class ClientUpdate:
     parameters: Dict[str, torch.Tensor]
     num_samples: int
     metrics: Dict[str, Any]
+    control_variate_delta: Optional[Dict[str, torch.Tensor]] = None
 
 
 class BaseFederatedAlgorithm(ABC):
