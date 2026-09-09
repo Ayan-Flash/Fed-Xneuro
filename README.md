@@ -178,22 +178,77 @@ Federated Averaging (**FedAvg**) trains neural networks across distributed data 
 
 ---
 
-## 7. Artifacts & Storage Layout
+## 7. Phase 2: Advanced Federated Optimization
 
-| Category | Path | Description |
-| :--- | :--- | :--- |
-| **Datasets** | `data/raw/mnist/` | Downloaded raw benchmark datasets (git-ignored) |
-| **Model Weights** | `models/global/<run_id>/` | Checkpoints per round (`round_001.pt` ... `final.pt`) |
-| **Experiment Runs** | `experiments/runs/<run_id>/` | Run manifests, configurations, metrics JSON & CSV |
-| **Metrics** | `results/metrics/<run_id>/` | Machine-readable metrics (`metrics.json`, `metrics.csv`, `summary.json`) |
-| **Visualizations** | `results/plots/<run_id>/` | Training curves (`training_curves.png`) |
-| **Documentation** | `docs/` | In-depth architecture, algorithm, and dataset guides |
+PS32 supports advanced optimization algorithms designed to combat client drift under extreme non-IID conditions:
+
+### 7.1 FedProx
+Adds proximal regularization $\frac{\mu}{2} \|w - w_{\text{global}}\|^2$ to local loss:
+```powershell
+python backend/run_simulation.py --algorithm fedprox --mu 0.01 --partition dirichlet --alpha 0.1
+```
+
+### 7.2 FedAvgM
+Applies server Heavy-Ball momentum to global pseudo-gradients:
+```powershell
+python backend/run_simulation.py --algorithm fedavgm --server-momentum 0.9 --server-lr 1.0
+```
+
+### 7.3 SCAFFOLD
+Uses client and server control variates to correct local gradient drift:
+```powershell
+python backend/run_simulation.py --algorithm scaffold --server-lr 1.0
+```
+
+### 7.4 Multi-Algorithm Comparative Benchmark Suite
+Run an automated side-by-side benchmark comparing all 4 algorithms on identical Dirichlet non-IID splits:
+```powershell
+python backend/benchmark.py --dataset mnist --model cnn --rounds 5 --partition dirichlet --alpha 0.1
+```
+Results, comparative accuracy/loss curves, and summary tables are saved to `results/plots/benchmarks/`.
 
 ---
 
-## 8. Documentation Index
+## 8. Phase 3: Differential Privacy (DP-FL) Guard
+
+PS32 provides complete client-level and parameter-level $(\epsilon, \delta)$-Differential Privacy:
+- **$L_2$ Norm Clipping**: Bounds sensitivity by clipping client parameter deltas to threshold $C$.
+- **Gaussian Perturbation**: Injects zero-mean Gaussian noise into aggregated parameters.
+- **Rényi DP (RDP) Accounting**: Tracks cumulative $(\epsilon, \delta)$ spent across rounds.
+- **Inversion Attack Defense**: Prevents gradient leakage and image reconstruction.
+
+Run simulation with Differential Privacy enabled:
+```powershell
+python backend/run_simulation.py `
+    --dataset mnist `
+    --model cnn `
+    --algorithm fedavg `
+    --enable-dp `
+    --dp-clip-norm 1.0 `
+    --dp-noise-multiplier 0.5 `
+    --dp-target-delta 1e-5
+```
+
+---
+
+## 9. External Model Training & Checkpoint Resumption
+
+You can train standalone models in another directory and connect them to PS32:
+```powershell
+python backend/run_simulation.py `
+    --model cnn `
+    --checkpoint "path/to/my_trained_model.pt" `
+    --rounds 5
+```
+
+---
+
+## 10. Documentation Index
 
 - [FL Engine Architecture](docs/architecture/fl-architecture.md)
-- [FedAvg Algorithm Details](docs/algorithms/fedavg.md)
+- [FedAvg Baseline Algorithm](docs/algorithms/fedavg.md)
+- [Advanced Optimization (FedProx, FedAvgM, SCAFFOLD)](docs/algorithms/advanced_optimization.md)
+- [Differential Privacy (DP-FL) Guard](docs/privacy/differential_privacy.md)
+- [External Model Endpoints & Training Integration](docs/models/external_model_endpoints.md)
 - [Dataset Management & Partitioning](docs/experiments/datasets.md)
 - [Evaluation & Metrics Methodology](docs/experiments/evaluation.md)
