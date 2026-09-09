@@ -15,6 +15,8 @@ from backend.fl_engine.core.dataset_manager import DatasetManager
 from backend.fl_engine.core.model_manager import ModelManager
 from backend.fl_engine.core.metrics_manager import MetricsManager
 from backend.fl_engine.algorithms import create_algorithm
+from backend.fl_engine.privacy.dp_mechanism import DifferentialPrivacyMechanism
+from backend.fl_engine.privacy.rdp_accountant import RDPAccountant
 from backend.fl_engine.utils.seed import set_seed
 from backend.fl_engine.evaluation.convergence import ConvergenceTracker
 from backend.fl_engine.evaluation.fairness import FairnessEvaluator
@@ -94,17 +96,42 @@ class SimulationEngine:
                 clients.append(client)
 
             # 4. Algorithm & Server Initialization
-            algorithm = create_algorithm(self.config.algorithm, **self.config.algorithm_kwargs)
+            algo_kwargs = dict(self.config.algorithm_kwargs)
+            algo_key = self.config.algorithm.lower()
+            if algo_key == "fedprox" and "mu" not in algo_kwargs:
+                algo_kwargs["mu"] = self.config.mu
+            elif algo_key == "fedavgm":
+                if "server_momentum" not in algo_kwargs:
+                    algo_kwargs["server_momentum"] = self.config.server_momentum
+                if "server_lr" not in algo_kwargs:
+                    algo_kwargs["server_lr"] = self.config.server_lr
+            elif algo_key == "scaffold" and "server_lr" not in algo_kwargs:
+                algo_kwargs["server_lr"] = self.config.server_lr
+
+            algorithm = create_algorithm(self.config.algorithm, **algo_kwargs)
             client_selector = RandomClientSelector(
                 client_fraction=self.config.client_fraction,
                 seed=self.config.seed,
             )
+
+            # Initialize Differential Privacy if enabled
+            dp_mechanism = None
+            rdp_accountant = None
+            if self.config.enable_dp:
+                dp_mechanism = DifferentialPrivacyMechanism(
+                    clip_norm=self.config.dp_clip_norm,
+                    noise_multiplier=self.config.dp_noise_multiplier,
+                    target_delta=self.config.dp_target_delta,
+                )
+                rdp_accountant = RDPAccountant(target_delta=self.config.dp_target_delta)
+
             server = FederatedServer(
                 global_model=global_model,
                 algorithm=algorithm,
                 client_selector=client_selector,
                 test_dataset=test_dataset,
                 device=self.device,
+                dp_mechanism=dp_mechanism,
             )
             server.register_clients(clients)
 
@@ -121,6 +148,18 @@ class SimulationEngine:
             # 5. Round Loop
             for round_num in range(1, self.config.num_rounds + 1):
                 round_result = server.run_round(round_num)
+
+                # Record differential privacy budget if enabled
+                if self.config.enable_dp and rdp_accountant is not None:
+                    sampling_ratio = round_result["selected_clients"] / float(max(1, self.config.num_clients))
+                    rdp_accountant.step(
+                        sampling_ratio=sampling_ratio,
+                        noise_multiplier=self.config.dp_noise_multiplier
+                    )
+                    eps_spent = rdp_accountant.get_epsilon()
+                    round_result["privacy_budget_spent"] = round(eps_spent, 4)
+                    round_result["privacy_delta"] = self.config.dp_target_delta
+
                 self.metrics_manager.log_round(round_result)
                 self.state.update_round(
                     round_num=round_num,
@@ -174,6 +213,15 @@ class SimulationEngine:
                 "checkpoints_path": checkpoint_dir,
             }
 
+            if self.config.enable_dp and rdp_accountant is not None:
+                summary["privacy_metrics"] = {
+                    "enable_dp": True,
+                    "clip_norm": self.config.dp_clip_norm,
+                    "noise_multiplier": self.config.dp_noise_multiplier,
+                    "target_delta": self.config.dp_target_delta,
+                    "final_epsilon": round(rdp_accountant.get_epsilon(), 4),
+                }
+
             self.metrics_manager.set_summary(summary)
             saved_paths = self.metrics_manager.save_results()
             self.state.complete()
@@ -187,18 +235,28 @@ class SimulationEngine:
 
     def _print_header(self) -> None:
         device_str = "CUDA" if self.device.type == "cuda" else "CPU"
+        algo_info = self.config.algorithm.upper()
+        if self.config.algorithm.lower() == "fedprox":
+            algo_info += f" (mu={self.config.mu})"
+        elif self.config.algorithm.lower() == "fedavgm":
+            algo_info += f" (momentum={self.config.server_momentum}, lr={self.config.server_lr})"
+        elif self.config.algorithm.lower() == "scaffold":
+            algo_info += f" (server_lr={self.config.server_lr})"
+
         print("=" * 50, flush=True)
         print("PS32 Federated Learning Simulator", flush=True)
         print("=" * 50, flush=True)
         print(f"Dataset       : {self.config.dataset.upper()}", flush=True)
         print(f"Model         : {self.config.model.upper()}", flush=True)
-        print(f"Algorithm     : {self.config.algorithm.upper()}", flush=True)
+        print(f"Algorithm     : {algo_info}", flush=True)
         print(f"Clients       : {self.config.num_clients}", flush=True)
         print(f"Rounds        : {self.config.num_rounds}", flush=True)
         print(f"Local Epochs  : {self.config.local_epochs}", flush=True)
         print(f"Partition     : {self.config.partition_type.upper()}", flush=True)
         print(f"Device        : {device_str}", flush=True)
         print(f"Seed          : {self.config.seed}", flush=True)
+        if self.config.enable_dp:
+            print(f"Privacy (DP)  : CLIP={self.config.dp_clip_norm} | SIGMA={self.config.dp_noise_multiplier} | DELTA={self.config.dp_target_delta}", flush=True)
         print(flush=True)
 
     def _print_round(self, r: Dict[str, Any]) -> None:
@@ -211,6 +269,8 @@ class SimulationEngine:
         print(f"Global Loss      : {r['global_loss']:.4f}", flush=True)
         print(f"Global Accuracy  : {r['global_accuracy']:.2f}%", flush=True)
         print(f"Training Time    : {r['training_time']:.2f}s", flush=True)
+        if "privacy_budget_spent" in r:
+            print(f"Privacy Spent    : eps = {r['privacy_budget_spent']:.4f} (delta = {r.get('privacy_delta', 1e-5)})", flush=True)
         print(flush=True)
 
     def _print_completion(self, summary: Dict[str, Any], saved_paths: Dict[str, str]) -> None:

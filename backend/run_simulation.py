@@ -111,6 +111,36 @@ def parse_arguments() -> argparse.Namespace:
         "--custom-model-class", type=str, default=None, dest="custom_model_class",
         help="Class name of the custom model inside --custom-model-path"
     )
+    # Advanced Optimization Parameters
+    parser.add_argument(
+        "--mu", type=float, default=0.01,
+        help="FedProx proximal regularization coefficient"
+    )
+    parser.add_argument(
+        "--server-momentum", type=float, default=0.9,
+        help="FedAvgM server momentum coefficient (beta)"
+    )
+    parser.add_argument(
+        "--server-lr", type=float, default=1.0,
+        help="Server learning rate for FedAvgM or SCAFFOLD"
+    )
+    # Differential Privacy Parameters
+    parser.add_argument(
+        "--enable-dp", action="store_true", default=False,
+        help="Enable Differential Privacy (DP-FL) with L2 clipping and Gaussian noise"
+    )
+    parser.add_argument(
+        "--dp-clip-norm", type=float, default=1.0,
+        help="Maximum L2 norm threshold C for clipping client updates"
+    )
+    parser.add_argument(
+        "--dp-noise-multiplier", type=float, default=0.5,
+        help="Gaussian noise multiplier (sigma) for DP perturbation"
+    )
+    parser.add_argument(
+        "--dp-target-delta", type=float, default=1e-5,
+        help="Target delta for (epsilon, delta) Differential Privacy"
+    )
     return parser.parse_args()
 
 
@@ -145,6 +175,13 @@ def main() -> None:
             checkpoint_path=args.checkpoint_path,
             custom_model_path=args.custom_model_path,
             custom_model_class=args.custom_model_class,
+            mu=args.mu,
+            server_momentum=args.server_momentum,
+            server_lr=args.server_lr,
+            enable_dp=args.enable_dp,
+            dp_clip_norm=args.dp_clip_norm,
+            dp_noise_multiplier=args.dp_noise_multiplier,
+            dp_target_delta=args.dp_target_delta,
         )
 
     engine = SimulationEngine(config)

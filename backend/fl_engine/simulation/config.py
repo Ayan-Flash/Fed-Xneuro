@@ -43,6 +43,17 @@ class SimulationConfig:
     custom_model_path: Optional[str] = None
     custom_model_class: Optional[str] = None
 
+    # Advanced Optimization Hyperparameters
+    mu: float = 0.01
+    server_momentum: float = 0.9
+    server_lr: float = 1.0
+
+    # Differential Privacy (DP-FL)
+    enable_dp: bool = False
+    dp_clip_norm: float = 1.0
+    dp_noise_multiplier: float = 0.5
+    dp_target_delta: float = 1e-5
+
     # Extra algorithm-specific arguments
     algorithm_kwargs: Dict[str, Any] = field(default_factory=dict)
 

@@ -34,22 +34,67 @@ class FederatedClient:
         # Create an independent local copy of the model
         self.model = copy.deepcopy(model).to(self.device)
         self.trainer = trainer or Trainer(device=self.device)
+        self.control_variate: Dict[str, torch.Tensor] = {}
+        self.last_control_variate_delta: Dict[str, torch.Tensor] = {}
         self.last_metrics: Dict[str, Any] = {}
 
-    def train(self) -> Dict[str, Any]:
+    def train(
+        self,
+        proximal_reference: Optional[Dict[str, torch.Tensor]] = None,
+        mu: float = 0.0,
+        server_control: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Dict[str, Any]:
         """
         Trains the local model on the client's local dataset.
+        Supports FedProx proximal regularization and SCAFFOLD control variate correction.
         
         Returns:
             Dict containing training metrics.
         """
+        initial_params = {k: v.detach().clone() for k, v in self.model.state_dict().items()}
+
+        # If mu > 0 and no explicit reference given, the initial parameters serve as reference
+        if mu > 0.0 and proximal_reference is None:
+            proximal_reference = initial_params
+
+        # Prepare SCAFFOLD control variates
+        cv_tuple = None
+        if server_control is not None:
+            if not self.control_variate:
+                self.control_variate = {k: torch.zeros_like(v) for k, v in initial_params.items()}
+            cv_tuple = (self.control_variate, server_control)
+
         metrics = self.trainer.train(
             model=self.model,
             dataset=self.dataset,
             local_epochs=self.local_epochs,
             batch_size=self.batch_size,
             learning_rate=self.learning_rate,
+            proximal_reference=proximal_reference,
+            mu=mu,
+            control_variates=cv_tuple,
         )
+
+        # Update SCAFFOLD control variate and delta
+        if server_control is not None:
+            total_batches = max(1, metrics.get("total_batches", 1))
+            step_scale = 1.0 / (total_batches * self.learning_rate)
+            current_params = self.model.state_dict()
+            delta_c = {}
+            for k in initial_params.keys():
+                ci = self.control_variate[k].to(self.device)
+                cs = server_control.get(k, torch.zeros_like(ci)).to(self.device)
+                x = initial_params[k].to(self.device)
+                y = current_params[k].to(self.device)
+                # c_new = ci - cs + (1 / (K * eta)) * (x - y)
+                c_new = ci - cs + step_scale * (x - y)
+                delta = c_new - ci
+                delta_c[k] = delta.detach().cpu().clone()
+                self.control_variate[k] = c_new.detach().clone()
+            self.last_control_variate_delta = delta_c
+        else:
+            self.last_control_variate_delta = {}
+
         self.last_metrics = {
             "client_id": self.client_id,
             "train_loss": metrics["loss"],
@@ -58,6 +103,10 @@ class FederatedClient:
             "num_samples": metrics["samples_trained"],
         }
         return self.last_metrics
+
+    def get_control_variate_delta(self) -> Dict[str, torch.Tensor]:
+        """Returns the control variate delta from the most recent training round."""
+        return self.last_control_variate_delta
 
     def evaluate(self) -> Dict[str, Any]:
         """

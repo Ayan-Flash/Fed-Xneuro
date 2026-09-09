@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
@@ -28,12 +28,16 @@ class Trainer:
         learning_rate: float,
         momentum: float = 0.9,
         weight_decay: float = 1e-4,
+        proximal_reference: Optional[Dict[str, torch.Tensor]] = None,
+        mu: float = 0.0,
+        control_variates: Optional[Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]] = None,
     ) -> Dict[str, Any]:
         """
         Executes local training loop for the given number of epochs.
+        Supports standard SGD, FedProx proximal regularization, and SCAFFOLD control variate correction.
 
         Returns:
-            Dict containing training metrics (loss, accuracy, duration, samples_trained).
+            Dict containing training metrics (loss, accuracy, duration, samples_trained, total_batches).
         """
         model.to(self.device)
         model.train()
@@ -45,6 +49,7 @@ class Trainer:
                 "accuracy": 0.0,
                 "duration": 0.0,
                 "samples_trained": 0,
+                "total_batches": 0,
             }
 
         data_loader = DataLoader(
@@ -57,7 +62,7 @@ class Trainer:
         optimizer = torch.optim.SGD(
             model.parameters(),
             lr=learning_rate,
-            momentum=momentum,
+            momentum=momentum if control_variates is None else 0.0,  # SCAFFOLD standard uses SGD without momentum
             weight_decay=weight_decay
         )
 
@@ -65,6 +70,12 @@ class Trainer:
         total_loss = 0.0
         correct_predictions = 0
         total_samples = 0
+        total_batches = 0
+
+        # Unpack control variates if provided for SCAFFOLD
+        c_client, c_server = (None, None)
+        if control_variates is not None:
+            c_client, c_server = control_variates
 
         for epoch in range(local_epochs):
             epoch_loss = 0.0
@@ -77,7 +88,26 @@ class Trainer:
 
                 output = model(data)
                 loss = self.criterion(output, target)
+
+                # FedProx: Add proximal regularization penalty: (mu / 2) * ||w - w_global||^2
+                if mu > 0.0 and proximal_reference is not None:
+                    prox_loss = torch.tensor(0.0, device=self.device)
+                    for name, param in model.named_parameters():
+                        if name in proximal_reference:
+                            ref = proximal_reference[name].to(self.device)
+                            prox_loss = prox_loss + (param - ref).pow(2).sum()
+                    loss = loss + (mu / 2.0) * prox_loss
+
                 loss.backward()
+
+                # SCAFFOLD: Adjust parameter gradients with (c_server - c_client)
+                if c_client is not None and c_server is not None:
+                    for name, param in model.named_parameters():
+                        if param.grad is not None and name in c_client and name in c_server:
+                            cs = c_server[name].to(self.device)
+                            ci = c_client[name].to(self.device)
+                            param.grad.data.add_(cs - ci)
+
                 optimizer.step()
 
                 batch_size_actual = data.size(0)
@@ -85,6 +115,7 @@ class Trainer:
                 preds = output.argmax(dim=1, keepdim=True)
                 epoch_correct += preds.eq(target.view_as(preds)).sum().item()
                 epoch_samples += batch_size_actual
+                total_batches += 1
 
             total_loss += epoch_loss
             correct_predictions += epoch_correct
@@ -99,6 +130,7 @@ class Trainer:
             "accuracy": float(accuracy),
             "duration": float(duration),
             "samples_trained": len(dataset),
+            "total_batches": total_batches,
         }
 
     def evaluate(

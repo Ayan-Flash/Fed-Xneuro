@@ -22,6 +22,9 @@ class FedAvgM(BaseFederatedAlgorithm):
         client_updates: List[ClientUpdate],
         global_parameters: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        if not client_updates:
+            raise ValueError("No client updates to aggregate.")
+
         client_parameters = [update.parameters for update in client_updates]
         client_sample_counts = [update.num_samples for update in client_updates]
         avg_params = self.aggregator.aggregate(client_parameters, client_sample_counts)
@@ -32,10 +35,15 @@ class FedAvgM(BaseFederatedAlgorithm):
         # Compute pseudo-gradient: delta = global_parameters - avg_params
         new_params: Dict[str, torch.Tensor] = {}
         for key in avg_params.keys():
-            delta = global_parameters[key] - avg_params[key]
+            g_p = global_parameters[key]
+            a_p = avg_params[key].to(g_p.device)
+            delta = g_p - a_p
             if key not in self.momentum_buffer:
                 self.momentum_buffer[key] = torch.zeros_like(delta)
+            else:
+                self.momentum_buffer[key] = self.momentum_buffer[key].to(delta.device)
+
             self.momentum_buffer[key] = self.server_momentum * self.momentum_buffer[key] + delta
-            new_params[key] = global_parameters[key] - self.server_lr * self.momentum_buffer[key]
+            new_params[key] = g_p - self.server_lr * self.momentum_buffer[key]
 
         return new_params

@@ -28,6 +28,7 @@ class FederatedServer:
         test_dataset: Optional[Dataset] = None,
         device: Optional[torch.device] = None,
         criterion: Optional[nn.Module] = None,
+        dp_mechanism: Optional[Any] = None,
     ) -> None:
         self.device = device or torch.device("cpu")
         self.global_model = global_model.to(self.device)
@@ -35,6 +36,7 @@ class FederatedServer:
         self.client_selector = client_selector or RandomClientSelector(client_fraction=1.0)
         self.test_dataset = test_dataset
         self.criterion = criterion or nn.CrossEntropyLoss()
+        self.dp_mechanism = dp_mechanism
 
         self.clients: Dict[str, FederatedClient] = {}
         self.communication_tracker = CommunicationTracker(
@@ -66,18 +68,37 @@ class FederatedServer:
     def receive_client_updates(self, selected_client_ids: List[str]) -> List[ClientUpdate]:
         """
         Commands selected clients to perform local training and collects updates.
+        Passes proximal reference or control variates if configured by the algorithm.
         """
+        # Determine if algorithm requires FedProx proximal regularization
+        mu = getattr(self.algorithm, "mu", 0.0)
+        proximal_ref = None
+        if mu > 0.0:
+            proximal_ref = {
+                k: v.detach().cpu().clone() for k, v in self.global_model.state_dict().items()
+            }
+
+        # Determine if algorithm requires SCAFFOLD server control variate
+        server_control = getattr(self.algorithm, "server_control", None)
+
         updates: List[ClientUpdate] = []
         for cid in selected_client_ids:
             client = self.clients[cid]
-            train_metrics = client.train()
+            train_metrics = client.train(
+                proximal_reference=proximal_ref,
+                mu=mu,
+                server_control=server_control,
+            )
             params = client.get_model_parameters()
+            cv_delta = client.get_control_variate_delta() if server_control is not None else None
+
             updates.append(
                 ClientUpdate(
                     client_id=cid,
                     parameters=params,
                     num_samples=client.num_samples,
                     metrics=train_metrics,
+                    control_variate_delta=cv_delta,
                 )
             )
         return updates
@@ -144,9 +165,28 @@ class FederatedServer:
         client_updates = self.receive_client_updates(selected_client_ids)
         train_duration = time.time() - train_start
 
+        # 3b. Differential Privacy: Clip client model updates
+        if self.dp_mechanism is not None:
+            current_global_params = {
+                k: v.detach().cpu().clone() for k, v in self.global_model.state_dict().items()
+            }
+            client_updates, _ = self.dp_mechanism.clip_client_updates(
+                client_updates, current_global_params
+            )
+
         # 4. Aggregation
         agg_start = time.time()
         self.aggregate_updates(client_updates)
+
+        # 4b. Differential Privacy: Add calibrated Gaussian noise to aggregated model
+        if self.dp_mechanism is not None:
+            noised_params = self.dp_mechanism.perturb_aggregated_parameters(
+                self.global_model.state_dict(),
+                num_participating_clients=len(selected_client_ids)
+            )
+            dev_params = {k: v.to(self.device) for k, v in noised_params.items()}
+            self.global_model.load_state_dict(dev_params, strict=True)
+
         agg_duration = time.time() - agg_start
 
         # 5. Global Evaluation

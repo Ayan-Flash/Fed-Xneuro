@@ -22,6 +22,8 @@ class FedProx(BaseFederatedAlgorithm):
         client_updates: List[ClientUpdate],
         global_parameters: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, torch.Tensor]:
+        if not client_updates:
+            raise ValueError("No client updates to aggregate.")
         client_parameters = [update.parameters for update in client_updates]
         client_sample_counts = [update.num_samples for update in client_updates]
         return self.aggregator.aggregate(client_parameters, client_sample_counts)
