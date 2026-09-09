@@ -1,0 +1,22 @@
+# PS32 Federated Learning Simulator - Baseline Experiment Config
+# FedAvg on MNIST (IID Partitioning)
+
+experiment_name: "fedavg_mnist_iid"
+description: "Standard FedAvg baseline on MNIST with IID data distribution across 5 clients"
+
+dataset: "mnist"
+model: "cnn"
+algorithm: "fedavg"
+
+num_clients: 5
+client_fraction: 1.0
+num_rounds: 10
+local_epochs: 1
+batch_size: 32
+learning_rate: 0.01
+
+partition_type: "iid"
+partition_alpha: 0.5
+seed: 42
+device: "auto"
+save_checkpoints: true

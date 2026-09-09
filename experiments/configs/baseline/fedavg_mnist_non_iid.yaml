@@ -1,0 +1,22 @@
+# PS32 Federated Learning Simulator - Baseline Experiment Config
+# FedAvg on MNIST (Label-based Non-IID Partitioning)
+
+experiment_name: "fedavg_mnist_non_iid"
+description: "FedAvg baseline on MNIST with label-skew Non-IID distribution (shards per client)"
+
+dataset: "mnist"
+model: "cnn"
+algorithm: "fedavg"
+
+num_clients: 5
+client_fraction: 1.0
+num_rounds: 10
+local_epochs: 1
+batch_size: 32
+learning_rate: 0.01
+
+partition_type: "non_iid"
+partition_alpha: 0.5
+seed: 42
+device: "auto"
+save_checkpoints: true
