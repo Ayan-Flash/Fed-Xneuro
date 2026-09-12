@@ -1,0 +1,85 @@
+{
+  "patient_id": "PAT_0043",
+  "risk_probability": 0.5217,
+  "risk_category": "MODERATE",
+  "clinical_importance": [
+    {
+      "feature": "Systolic-BP",
+      "importance": 0.0155,
+      "relative_pct": 20.7
+    },
+    {
+      "feature": "Education",
+      "importance": 0.011,
+      "relative_pct": 14.7
+    },
+    {
+      "feature": "Sex",
+      "importance": 0.0109,
+      "relative_pct": 14.6
+    },
+    {
+      "feature": "BMI",
+      "importance": 0.0094,
+      "relative_pct": 12.6
+    },
+    {
+      "feature": "Cholesterol",
+      "importance": 0.0093,
+      "relative_pct": 12.5
+    },
+    {
+      "feature": "APOE4-Alleles",
+      "importance": 0.0046,
+      "relative_pct": 6.2
+    },
+    {
+      "feature": "FAQ",
+      "importance": 0.0043,
+      "relative_pct": 5.8
+    },
+    {
+      "feature": "ADAS-Cog11",
+      "importance": 0.0027,
+      "relative_pct": 3.6
+    },
+    {
+      "feature": "CDR-SB",
+      "importance": 0.0024,
+      "relative_pct": 3.2
+    },
+    {
+      "feature": "ADAS-Cog13",
+      "importance": 0.0023,
+      "relative_pct": 3.1
+    },
+    {
+      "feature": "Age",
+      "importance": 0.0015,
+      "relative_pct": 2.0
+    },
+    {
+      "feature": "MMSE",
+      "importance": 0.0009,
+      "relative_pct": 1.2
+    }
+  ],
+  "top_clinical_feature": "Systolic-BP",
+  "mri_attribution": {
+    "hippocampus_importance_pct": 35.0,
+    "peak_attribution_voxel": [
+      4,
+      3,
+      3
+    ],
+    "global_attribution_mean": 1.0035725608759094e-05
+  },
+  "longitudinal_visit_weights": [
+    0.168,
+    0.175,
+    0.186,
+    0.162,
+    0.171,
+    0.137
+  ]
+}

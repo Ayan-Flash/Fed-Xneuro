@@ -4,12 +4,19 @@ from backend.fl_engine.algorithms.baselines.fedavg import FedAvg
 from backend.fl_engine.algorithms.baselines.fedprox import FedProx
 from backend.fl_engine.algorithms.baselines.fedavgm import FedAvgM
 from backend.fl_engine.algorithms.baselines.scaffold import SCAFFOLD
+from backend.fl_engine.algorithms.proposed.fedxneuro import FedXNeuro
+from backend.fl_engine.algorithms.proposed.algorithm_2 import FedXNeuroPersonalized
 
 ALGORITHM_REGISTRY: Dict[str, Type[BaseFederatedAlgorithm]] = {
     "fedavg": FedAvg,
     "fedprox": FedProx,
     "fedavgm": FedAvgM,
     "scaffold": SCAFFOLD,
+    "fedxneuro": FedXNeuro,
+    "fed_xneuro": FedXNeuro,
+    "fedxneuro_personalized": FedXNeuroPersonalized,
+    "fed_xneuro_personalized": FedXNeuroPersonalized,
+    "fedxneuro_p": FedXNeuroPersonalized,
 }
 
 
@@ -29,6 +36,8 @@ __all__ = [
     "FedProx",
     "FedAvgM",
     "SCAFFOLD",
+    "FedXNeuro",
+    "FedXNeuroPersonalized",
     "create_algorithm",
     "ALGORITHM_REGISTRY",
 ]

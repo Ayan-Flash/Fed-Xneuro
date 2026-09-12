@@ -28,13 +28,12 @@ class Trainer:
         learning_rate: float,
         momentum: float = 0.9,
         weight_decay: float = 1e-4,
-        proximal_reference: Optional[Dict[str, torch.Tensor]] = None,
-        mu: float = 0.0,
-        control_variates: Optional[Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]] = None,
+        proximal_mu: float = 0.0,
+        global_parameters: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Dict[str, Any]:
         """
         Executes local training loop for the given number of epochs.
-        Supports standard SGD, FedProx proximal regularization, and SCAFFOLD control variate correction.
+        Supports FedProx proximal loss regularization when proximal_mu > 0.
 
         Returns:
             Dict containing training metrics (loss, accuracy, duration, samples_trained, total_batches).
@@ -89,14 +88,14 @@ class Trainer:
                 output = model(data)
                 loss = self.criterion(output, target)
 
-                # FedProx: Add proximal regularization penalty: (mu / 2) * ||w - w_global||^2
-                if mu > 0.0 and proximal_reference is not None:
-                    prox_loss = torch.tensor(0.0, device=self.device)
+                # FedProx proximal regularization: (mu / 2) * sum(||w - w_global||^2)
+                if proximal_mu > 0.0 and global_parameters is not None:
+                    proximal_term = torch.tensor(0.0, device=self.device)
                     for name, param in model.named_parameters():
-                        if name in proximal_reference:
-                            ref = proximal_reference[name].to(self.device)
-                            prox_loss = prox_loss + (param - ref).pow(2).sum()
-                    loss = loss + (mu / 2.0) * prox_loss
+                        if name in global_parameters:
+                            g_param = global_parameters[name].to(param.device)
+                            proximal_term = proximal_term + (param - g_param).norm(2) ** 2
+                    loss = loss + (proximal_mu / 2.0) * proximal_term
 
                 loss.backward()
 

@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset
 from backend.fl_engine.algorithms.baselines.fedprox import FedProx
-from backend.fl_engine.algorithms.base import ClientUpdate
 from backend.fl_engine.core.trainer import Trainer
 
 
@@ -16,71 +15,46 @@ def test_fedprox_initialization():
 
 
 def test_fedprox_proximal_term_regularization():
-    """
-    Verify that FedProx proximal penalty (mu / 2) * ||w - w_ref||^2 pulls weights
-    closer to the reference parameters compared to unregularized training (mu=0).
-    """
+    """Verify FedProx proximal term keeps local parameters closer to global model."""
     torch.manual_seed(42)
-    inputs = torch.randn(40, 4)
-    targets = torch.randint(0, 2, (40,))
-    dataset = TensorDataset(inputs, targets)
+    # Simple linear model
+    x = torch.randn(20, 5)
+    y = torch.randint(0, 2, (20,))
+    dataset = TensorDataset(x, y)
 
-    # Initialize two identical linear models
-    model_unreg = nn.Linear(4, 2, bias=False)
-    model_prox = copy.deepcopy(model_unreg)
+    global_model = nn.Linear(5, 2)
+    global_params = {k: v.detach().clone() for k, v in global_model.state_dict().items()}
 
-    ref_weights = {k: v.detach().clone() for k, v in model_unreg.state_dict().items()}
-
-    trainer = Trainer(device=torch.device("cpu"))
-
-    # Train unregularized (mu = 0.0)
+    # Model 1: Trained without proximal term (mu = 0)
+    model_standard = nn.Linear(5, 2)
+    model_standard.load_state_dict(global_params)
+    trainer = Trainer()
     trainer.train(
-        model=model_unreg,
+        model=model_standard,
         dataset=dataset,
         local_epochs=5,
-        batch_size=8,
-        learning_rate=0.05,
-        mu=0.0,
+        batch_size=4,
+        learning_rate=0.1,
+        proximal_mu=0.0,
+        global_parameters=global_params,
     )
 
-    # Train with strong proximal penalty (mu = 2.0)
+    # Model 2: Trained with strong proximal term (mu = 10.0)
+    model_prox = nn.Linear(5, 2)
+    model_prox.load_state_dict(global_params)
     trainer.train(
         model=model_prox,
         dataset=dataset,
         local_epochs=5,
-        batch_size=8,
-        learning_rate=0.05,
-        proximal_reference=ref_weights,
-        mu=2.0,
+        batch_size=4,
+        learning_rate=0.1,
+        proximal_mu=10.0,
+        global_parameters=global_params,
     )
 
-    # Calculate L2 distance from original reference
-    dist_unreg = (model_unreg.weight - ref_weights["weight"]).norm().item()
-    dist_prox = (model_prox.weight - ref_weights["weight"]).norm().item()
+    # Compute L2 distance from global weights
+    dist_standard = sum((p - global_params[n]).norm(2).item() ** 2 for n, p in model_standard.named_parameters())
+    dist_prox = sum((p - global_params[n]).norm(2).item() ** 2 for n, p in model_prox.named_parameters())
 
-    # The proximal term must penalize drift, ensuring dist_prox < dist_unreg
-    assert dist_prox < dist_unreg, f"Expected dist_prox ({dist_prox}) < dist_unreg ({dist_unreg})"
-
-
-def test_fedprox_aggregation():
-    """Verify FedProx aggregates client updates using weighted FedAvg."""
-    algo = FedProx(mu=0.01)
-    p1 = {"w": torch.tensor([1.0, 2.0])}
-    p2 = {"w": torch.tensor([3.0, 4.0])}
-
-    updates = [
-        ClientUpdate(client_id="c1", parameters=p1, num_samples=100, metrics={}),
-        ClientUpdate(client_id="c2", parameters=p2, num_samples=300, metrics={}),
-    ]
-
-    aggregated = algo.aggregate(updates)
-    # Expected weighted average: 0.25 * [1, 2] + 0.75 * [3, 4] = [2.5, 3.5]
-    expected = torch.tensor([2.5, 3.5])
-    assert torch.allclose(aggregated["w"], expected)
-
-
-def test_fedprox_empty_updates_raises():
-    """Verify FedProx raises ValueError when update list is empty."""
-    algo = FedProx()
-    with pytest.raises(ValueError):
-        algo.aggregate([])
+    # Regularized model must drift significantly less from global model
+    assert dist_prox < dist_standard

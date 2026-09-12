@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fedxneuro-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/fed_xneuro.db
+      - SECRET_KEY=fedxneuro-production-secret-key-change-me
+      - API_V1_STR=/api/v1
+    volumes:
+      - ./data:/app/data
+      - ./results:/app/results
+      - ./models:/app/models
+    command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped

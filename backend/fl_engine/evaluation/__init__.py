@@ -3,6 +3,7 @@ from backend.fl_engine.evaluation.loss import calculate_loss
 from backend.fl_engine.evaluation.convergence import ConvergenceTracker
 from backend.fl_engine.evaluation.fairness import FairnessEvaluator
 from backend.fl_engine.evaluation.communication import CommunicationTracker
+from backend.fl_engine.evaluation.dashboard import ClinicianDashboard
 
 __all__ = [
     "calculate_accuracy",
@@ -10,4 +11,5 @@ __all__ = [
     "ConvergenceTracker",
     "FairnessEvaluator",
     "CommunicationTracker",
+    "ClinicianDashboard",
 ]

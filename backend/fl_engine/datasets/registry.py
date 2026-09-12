@@ -3,6 +3,7 @@ from backend.fl_engine.datasets.base import BaseDatasetManager
 from backend.fl_engine.datasets.mnist import MNISTDatasetManager
 from backend.fl_engine.datasets.cifar10 import CIFAR10DatasetManager
 from backend.fl_engine.datasets.fashion_mnist import FashionMNISTDatasetManager
+from backend.fl_engine.datasets.multimodal import MultimodalDatasetManager
 
 
 class DatasetRegistry:
@@ -31,3 +32,5 @@ class DatasetRegistry:
 DatasetRegistry.register("mnist", MNISTDatasetManager)
 DatasetRegistry.register("cifar10", CIFAR10DatasetManager)
 DatasetRegistry.register("fashion_mnist", FashionMNISTDatasetManager)
+DatasetRegistry.register("multimodal", MultimodalDatasetManager)
+DatasetRegistry.register("adni_mci", MultimodalDatasetManager)
