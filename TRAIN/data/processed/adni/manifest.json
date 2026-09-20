@@ -1,0 +1,16 @@
+{
+  "source": "adni",
+  "total_patients": 100,
+  "converters": 28,
+  "stables": 72,
+  "train_patients": 80,
+  "test_patients": 20,
+  "mri_shape": [
+    16,
+    16,
+    16
+  ],
+  "train_cohort_file": "TRAIN/data/processed/adni\\train_cohort.pt",
+  "test_cohort_file": "TRAIN/data/processed/adni\\test_cohort.pt",
+  "zero_leakage_verified": true
+}

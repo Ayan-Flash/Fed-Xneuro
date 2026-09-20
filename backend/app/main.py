@@ -59,6 +59,22 @@ def health_check():
     return {"status": "healthy", "service": "fed-xneuro-backend"}
 
 
+# Mount static files for Clinician & Research Web Dashboard
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/dashboard", response_class=FileResponse)
+def serve_dashboard():
+    index_path = os.path.join(static_dir, "index.html")
+    return FileResponse(index_path)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)

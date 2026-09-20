@@ -3,7 +3,7 @@ import time
 import json
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional, Callable, List
 import torch
 
 from backend.fl_engine.simulation.config import SimulationConfig
@@ -15,6 +15,9 @@ from backend.fl_engine.core.dataset_manager import DatasetManager
 from backend.fl_engine.core.model_manager import ModelManager
 from backend.fl_engine.core.metrics_manager import MetricsManager
 from backend.fl_engine.algorithms import create_algorithm
+from backend.fl_engine.algorithms.proposed.fedxneuro import FedXNeuroClient, FedXNeuroTrainer
+from backend.fl_engine.algorithms.proposed.utils import compute_clinical_metrics
+from backend.fl_engine.evaluation.dashboard import ClinicianDashboard
 from backend.fl_engine.privacy.dp_mechanism import DifferentialPrivacyMechanism
 from backend.fl_engine.privacy.rdp_accountant import RDPAccountant
 from backend.fl_engine.utils.seed import set_seed
@@ -29,7 +32,11 @@ class SimulationEngine:
     collects metrics; and saves reproducible experiment artifacts.
     """
 
-    def __init__(self, config: SimulationConfig) -> None:
+    def __init__(
+        self,
+        config: SimulationConfig,
+        on_round_complete: Optional[Callable[[int, Dict[str, Any]], None]] = None,
+    ) -> None:
         self.config = config
         self.device = config.resolve_device()
         self.run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
@@ -40,6 +47,7 @@ class SimulationEngine:
             experiments_dir=config.experiments_dir,
         )
         self.convergence_tracker = ConvergenceTracker()
+        self.on_round_complete = on_round_complete
 
     def run(self) -> Tuple[SimulationState, Dict[str, Any]]:
         """
@@ -82,17 +90,38 @@ class SimulationEngine:
                 ModelManager.load_model(global_model, self.config.checkpoint_path, device=self.device)
 
             # 3. Client Creation
+            is_fedxneuro = (
+                self.config.model.lower() in ["fedxneuro", "fed_xneuro"]
+                or self.config.algorithm.lower() in ["fedxneuro", "fed_xneuro", "fedxneuro_personalized", "fed_xneuro_personalized", "fedxneuro_p"]
+                or self.config.dataset.lower() in ["multimodal", "adni_mci"]
+            )
+
             clients = []
             for cid in range(self.config.num_clients):
-                client = FederatedClient(
-                    client_id=str(cid),
-                    dataset=client_datasets[cid],
-                    model=global_model,
-                    device=self.device,
-                    local_epochs=self.config.local_epochs,
-                    batch_size=self.config.batch_size,
-                    learning_rate=self.config.learning_rate,
-                )
+                if is_fedxneuro:
+                    client = FedXNeuroClient(
+                        client_id=f"Hospital_{chr(65 + cid)}",
+                        dataset=client_datasets[cid],
+                        model=global_model,
+                        device=self.device,
+                        local_epochs=self.config.local_epochs,
+                        batch_size=self.config.batch_size,
+                        learning_rate=self.config.learning_rate,
+                        use_dp=self.config.enable_dp,
+                        clip_norm=self.config.dp_clip_norm,
+                        noise_multiplier=self.config.dp_noise_multiplier,
+                        target_delta=self.config.dp_target_delta,
+                    )
+                else:
+                    client = FederatedClient(
+                        client_id=str(cid),
+                        dataset=client_datasets[cid],
+                        model=global_model,
+                        device=self.device,
+                        local_epochs=self.config.local_epochs,
+                        batch_size=self.config.batch_size,
+                        learning_rate=self.config.learning_rate,
+                    )
                 clients.append(client)
 
             # 4. Algorithm & Server Initialization
@@ -107,6 +136,11 @@ class SimulationEngine:
                     algo_kwargs["server_lr"] = self.config.server_lr
             elif algo_key == "scaffold" and "server_lr" not in algo_kwargs:
                 algo_kwargs["server_lr"] = self.config.server_lr
+            elif algo_key in ["fedxneuro", "fed_xneuro", "fedxneuro_personalized"]:
+                algo_kwargs["use_dp"] = self.config.enable_dp
+                algo_kwargs["clip_norm"] = self.config.dp_clip_norm
+                algo_kwargs["noise_multiplier"] = self.config.dp_noise_multiplier
+                algo_kwargs["target_delta"] = self.config.dp_target_delta
 
             algorithm = create_algorithm(self.config.algorithm, **algo_kwargs)
             client_selector = RandomClientSelector(
@@ -117,13 +151,16 @@ class SimulationEngine:
             # Initialize Differential Privacy if enabled
             dp_mechanism = None
             rdp_accountant = None
-            if self.config.enable_dp:
+            if self.config.enable_dp and not is_fedxneuro:
+                # FedXNeuro clients handle DP internally via their local DP Guard
                 dp_mechanism = DifferentialPrivacyMechanism(
                     clip_norm=self.config.dp_clip_norm,
                     noise_multiplier=self.config.dp_noise_multiplier,
                     target_delta=self.config.dp_target_delta,
                 )
                 rdp_accountant = RDPAccountant(target_delta=self.config.dp_target_delta)
+
+            evaluator = FedXNeuroTrainer(device=self.device) if is_fedxneuro else None
 
             server = FederatedServer(
                 global_model=global_model,
@@ -132,6 +169,7 @@ class SimulationEngine:
                 test_dataset=test_dataset,
                 device=self.device,
                 dp_mechanism=dp_mechanism,
+                evaluator=evaluator,
             )
             server.register_clients(clients)
 
@@ -160,6 +198,21 @@ class SimulationEngine:
                     round_result["privacy_budget_spent"] = round(eps_spent, 4)
                     round_result["privacy_delta"] = self.config.dp_target_delta
 
+                # Compute clinical metrics for multimodal Fed-XNeuro
+                if is_fedxneuro and "predictions" in round_result and "targets" in round_result:
+                    clin_metrics = compute_clinical_metrics(
+                        round_result["predictions"], round_result["targets"]
+                    )
+                    round_result["clinical_metrics"] = clin_metrics
+                    for k, v in clin_metrics.items():
+                        round_result[f"clinical_{k}"] = v
+
+                # Also retrieve DP budget if FedXNeuro
+                if is_fedxneuro and hasattr(algorithm, "get_privacy_spent"):
+                    eps_spent = algorithm.get_privacy_spent()
+                    round_result["privacy_budget_spent"] = round(eps_spent, 4)
+                    round_result["privacy_delta"] = self.config.dp_target_delta
+
                 self.metrics_manager.log_round(round_result)
                 self.state.update_round(
                     round_num=round_num,
@@ -174,6 +227,13 @@ class SimulationEngine:
                 )
 
                 self._print_round(round_result)
+
+                # Invoke on_round_complete callback if registered
+                if self.on_round_complete is not None:
+                    try:
+                        self.on_round_complete(round_num, round_result)
+                    except Exception as cb_err:
+                        print(f"Warning in on_round_complete callback: {cb_err}", flush=True)
 
                 # Save round checkpoint
                 if self.config.save_checkpoints:
@@ -224,6 +284,21 @@ class SimulationEngine:
 
             self.metrics_manager.set_summary(summary)
             saved_paths = self.metrics_manager.save_results()
+
+            # 9. Explainability Report for Clinicians if Fed-XNeuro
+            if is_fedxneuro and clients and hasattr(clients[0], "explain_patient"):
+                try:
+                    report = clients[0].explain_patient(index=0)
+                    json_path = os.path.join(self.config.results_dir, "clinician_report_sample.json")
+                    html_path = os.path.join(self.config.results_dir, "clinician_dashboard.html")
+                    ClinicianDashboard.save_json_report(report, json_path)
+                    ClinicianDashboard.save_html_report(report, html_path)
+                    summary["clinician_report"] = report
+                    saved_paths["clinician_report_json"] = json_path
+                    saved_paths["clinician_dashboard_html"] = html_path
+                except Exception as exp_err:
+                    print(f"Notice: Clinician report generation skipped: {exp_err}", flush=True)
+
             self.state.complete()
 
             self._print_completion(summary, saved_paths)

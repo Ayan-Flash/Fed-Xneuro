@@ -28,17 +28,17 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--dataset", type=str, default="mnist",
-        choices=["mnist", "cifar10", "fashion_mnist"],
+        choices=["mnist", "cifar10", "fashion_mnist", "multimodal", "adni_mci"],
         help="Dataset name"
     )
     parser.add_argument(
         "--model", type=str, default="cnn",
-        choices=["cnn", "mlp", "resnet"],
+        choices=["cnn", "mlp", "resnet", "fedxneuro", "fed_xneuro"],
         help="Model architecture"
     )
     parser.add_argument(
         "--algorithm", type=str, default="fedavg",
-        choices=["fedavg", "fedprox", "fedavgm", "scaffold"],
+        choices=["fedavg", "fedprox", "fedavgm", "scaffold", "fedxneuro", "fed_xneuro", "fedxneuro_personalized"],
         help="Federated aggregation algorithm"
     )
     parser.add_argument(

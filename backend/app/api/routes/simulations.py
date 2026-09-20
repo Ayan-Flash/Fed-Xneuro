@@ -51,6 +51,32 @@ def get_simulation_status(simulation_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.post("/{simulation_id}/start", response_model=SimulationStatus)
+def start_simulation(
+    simulation_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Starts asynchronous background execution of a simulation."""
+    from fastapi import HTTPException
+    sim = SimulationService.get_simulation(db, simulation_id)
+    if sim.status == "running":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Simulation {simulation_id} is already running",
+        )
+    background_tasks.add_task(SimulationWorker.start_simulation_task, simulation_id)
+    return SimulationStatus(
+        simulation_id=sim.id,
+        run_id=sim.run_id,
+        status="starting",
+        current_round=sim.current_round,
+        total_rounds=sim.num_rounds,
+        final_accuracy=sim.final_accuracy,
+        final_loss=sim.final_loss,
+    )
+
+
 @router.delete("/{simulation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_simulation(simulation_id: int, db: Session = Depends(get_db)):
     """Deletes a simulation."""

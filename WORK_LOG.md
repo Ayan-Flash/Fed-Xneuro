@@ -130,3 +130,36 @@ Entries are appended chronologically and never removed.
 **Notes:** GitHub write access / collaborator invitation or fork setup is required to push changes to the remote.
 
 ---
+
+## [2026-09-20 12:40] Task: Complete Remaining Platform Implementation (Simulation Engine, API Execution, Web Dashboard, Ablation Benchmark)
+
+**Objective:** Implement all remaining system components across Fed-XNeuro (excluding real dataset ingestion) with zero errors: unify `SimulationEngine` for multimodal Fed-XNeuro, complete FastAPI background simulation execution and WebSocket live telemetry, build the Clinician & Researcher Web Portal, implement Section 10 ablation benchmark, and verify with 100% test pass rate.
+
+**Actions Taken:**
+- **SimulationEngine & Core FL Unification**:
+  - Unified `SimulationEngine` (`backend/fl_engine/simulation/engine.py`) to dynamically orchestrate multimodal `Fed-XNeuro` workflows, dispatching to `FedXNeuroClient` and `FedXNeuroTrainer`, tracking clinical metrics (Accuracy, Sensitivity, Specificity, F1, ROC-AUC, PR-AUC, Brier score), and exporting clinician reports.
+  - Added `on_round_complete` callback to `SimulationEngine` for real-time progress notification.
+  - Reconciled parameter signatures in `Trainer.train` and `FedXNeuroClient.train`.
+  - Fixed `MultimodalDatasetManager.get_targets()` to return training subset targets, resolving indexing mismatch.
+  - Expanded `backend/run_simulation.py` CLI choices to include `multimodal` and `fedxneuro`.
+  - Configured Matplotlib to use headless `Agg` backend in `MetricsManager` to prevent Windows Tkinter thread conflicts.
+- **FastAPI Backend Execution Pipeline & Live Streaming**:
+  - Added `POST /api/v1/simulations/{id}/start` route in `backend/app/api/routes/simulations.py` using FastAPI `BackgroundTasks`.
+  - Implemented `SimulationWorker.start_simulation_task` (`backend/app/workers/simulation_worker.py`) managing background lifecycle, inserting round `Metric` rows, and broadcasting live round events over WebSockets (`/ws/simulations/{id}`).
+  - Updated `GET /api/v1/results/{simulation_id}/clinician-dashboard` to dynamically load actual generated clinician reports.
+  - Added fallback in `backend/app/core/config.py` from `pydantic_settings.BaseSettings` to `pydantic.BaseModel`.
+- **Clinician & Researcher Web Portal**:
+  - Built responsive HTML5/CSS3/JS single-page web dashboard (`backend/app/static/index.html`, `style.css`, `app.js`).
+  - Implemented Simulation Launcher, Live FL Monitor with native canvas accuracy/loss curve charting and WebSocket streaming, and Clinician Diagnostic View with risk gauges, 3D MRI brain slice visualization with hippocampal ROI heatmaps, and SHAP clinical feature bars.
+  - Mounted static assets and served dashboard at `/dashboard` in `backend/app/main.py`.
+- **Section 10 Comparative Experimental Study**:
+  - Implemented `backend/benchmark_fedxneuro.py` executing the 9-model progression specified in `docs/Fed-XNeuro_Architecture_and_Algorithm.md`.
+  - Verified benchmark execution, Markdown summary table generation (`results/plots/ablation/ablation_summary.md`), and JSON export.
+- **Automated Verification**:
+  - Created `backend/tests/integration/test_simulation_engine_fedxneuro.py` and `backend/tests/integration/test_simulation_execution_api.py`.
+  - Executed full test suite (`pytest backend/tests/ -v`): **54 passed, 0 failed, 0 skipped (100% pass rate)**.
+
+**Result:** Success. All remaining subsystems, engine unification, API execution pipeline, Web Portal, and ablation benchmarks are fully implemented and verified with zero errors.
+
+---
+

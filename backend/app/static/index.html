@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fed-XNeuro — Federated Clinical AI Platform</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">X</div>
+      <div>
+        <div class="brand-title">FED-XNEURO PLATFORM</div>
+        <div class="brand-subtitle">Explainable Multimodal Federated Clinical AI</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span id="backendStatus">Backend Online</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('simulationsTab', this)">
+      <span>🔬</span> Experiments & Simulations
+    </button>
+    <button class="tab-btn" onclick="switchTab('telemetryTab', this)">
+      <span>📈</span> Live FL Telemetry
+    </button>
+    <button class="tab-btn" onclick="switchTab('clinicianTab', this)">
+      <span>🧠</span> Clinician Diagnostic View
+    </button>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="main-container">
+
+    <!-- TAB 1: Simulations & Experiments -->
+    <section id="simulationsTab" class="tab-content active">
+      <div class="grid-2">
+        <!-- Launcher Form -->
+        <div class="card">
+          <div class="card-title">🚀 Launch Federated Simulation</div>
+          <div class="card-desc">Configure and initiate decentralized training across simulated hospital nodes.</div>
+          
+          <form id="simulationForm" onsubmit="handleCreateSimulation(event)">
+            <div class="form-group">
+              <label class="form-label">Simulation Name</label>
+              <input type="text" id="simName" class="form-control" value="Fed-XNeuro Clinical Run" required>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">Dataset</label>
+                <select id="simDataset" class="form-control">
+                  <option value="multimodal" selected>ADNI Multimodal (MRI + Cog + EHR)</option>
+                  <option value="mnist">MNIST (Baseline Digits)</option>
+                  <option value="cifar10">CIFAR-10 (Color Images)</option>
+                  <option value="fashion_mnist">Fashion-MNIST</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Neural Model</label>
+                <select id="simModel" class="form-control">
+                  <option value="fedxneuro" selected>Fed-XNeuro (3D ResNet + Transformer)</option>
+                  <option value="cnn">CNN (Baseline)</option>
+                  <option value="mlp">MLP</option>
+                  <option value="resnet">SmallResNet</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">FL Algorithm</label>
+                <select id="simAlgorithm" class="form-control">
+                  <option value="fedxneuro" selected>Fed-XNeuro (Sample-Weighted)</option>
+                  <option value="fedxneuro_personalized">Fed-XNeuro Personalized (Local Risk Heads)</option>
+                  <option value="fedavg">FedAvg</option>
+                  <option value="fedprox">FedProx (Proximal Term)</option>
+                  <option value="fedavgm">FedAvgM (Server Momentum)</option>
+                  <option value="scaffold">SCAFFOLD (Control Variates)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Hospital Clients</label>
+                <input type="number" id="simClients" class="form-control" value="3" min="1" max="20" required>
+              </div>
+            </div>
+
+            <div class="grid-3">
+              <div class="form-group">
+                <label class="form-label">Rounds</label>
+                <input type="number" id="simRounds" class="form-control" value="3" min="1" max="100" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Local Epochs</label>
+                <input type="number" id="simEpochs" class="form-control" value="1" min="1" max="10" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Batch Size</label>
+                <input type="number" id="simBatch" class="form-control" value="8" min="1" max="128" required>
+              </div>
+            </div>
+
+            <!-- Differential Privacy -->
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="simDP" checked>
+                <span>Enable Differential Privacy Guard (L2 Clip + Gaussian Noise)</span>
+              </label>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
+              <span>⚡</span> Start Experiment
+            </button>
+          </form>
+        </div>
+
+        <!-- Quick Stats & Info -->
+        <div>
+          <div class="grid-2">
+            <div class="metric-box">
+              <div class="metric-value" id="statTotalSims">0</div>
+              <div class="metric-label">Total Simulations</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-value" id="statActiveSims">0</div>
+              <div class="metric-label">Active / Running</div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-title">🛡️ Decentralized Clinical Privacy</div>
+            <div class="card-desc">Patient data boundaries and mathematical guarantees:</div>
+            <ul style="color: var(--text-secondary); font-size: 0.88rem; margin-left: 20px; line-height: 1.8;">
+              <li><strong>Zero Raw Data Transfer:</strong> Patient MRI volumes, EHR timelines, and cognitive test scores remain within local hospital firewalls.</li>
+              <li><strong>Differential Privacy Guard:</strong> Parameter updates are clipped ($C_{clip}=1.0$) with calibrated Gaussian noise ($\sigma=0.5$).</li>
+              <li><strong>On-Device Explainability:</strong> 3D Integrated Gradients and SHAP attributions are computed locally on client nodes.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Simulation List Table -->
+      <div class="card">
+        <div class="card-title">📋 Simulation Experiments</div>
+        <div class="card-desc">Recent federated training runs and real-time execution status.</div>
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Run ID</th>
+                <th>Name</th>
+                <th>Algorithm</th>
+                <th>Dataset</th>
+                <th>Rounds</th>
+                <th>Status</th>
+                <th>Accuracy</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="simulationsTableBody">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Loading simulations...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Live FL Telemetry -->
+    <section id="telemetryTab" class="tab-content">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <div class="card-title" id="telemetryTitle">📡 Live Simulation Telemetry</div>
+            <div class="card-desc" id="telemetryDesc">Select a simulation to observe real-time metrics streaming over WebSockets.</div>
+          </div>
+          <div class="status-badge" id="wsStatusBadge">
+            <span class="status-dot"></span>
+            <span id="wsStatusText">WebSocket Standby</span>
+          </div>
+        </div>
+
+        <div class="grid-4" style="margin-bottom: 24px;">
+          <div class="metric-box">
+            <div class="metric-value" id="liveRound">0 / 0</div>
+            <div class="metric-label">Current Round</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-value" id="liveAccuracy">0.0%</div>
+            <div class="metric-label">Global Accuracy</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-value" id="liveLoss">0.0000</div>
+            <div class="metric-label">Global Loss</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-value" id="liveEpsilon">ε = 0.00</div>
+            <div class="metric-label">Privacy Budget Spent</div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div>
+            <h4 style="margin-bottom: 10px; color: var(--text-secondary);">Accuracy vs Communication Round (%)</h4>
+            <div class="chart-container">
+              <canvas id="accuracyChart"></canvas>
+            </div>
+          </div>
+          <div>
+            <h4 style="margin-bottom: 10px; color: var(--text-secondary);">Loss vs Communication Round</h4>
+            <div class="chart-container">
+              <canvas id="lossChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: Clinician Diagnostic View -->
+    <section id="clinicianTab" class="tab-content">
+      <div class="card">
+        <div class="card-title">🩺 Clinician Diagnostic Report (Explainable AI)</div>
+        <div class="card-desc">Patient progression prediction and localized model attribution.</div>
+
+        <div class="grid-2">
+          <!-- Left Column: Risk & Clinical Factors -->
+          <div>
+            <div id="riskCardContainer" class="risk-card moderate">
+              <div style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8;">MCI → AD Progression Risk</div>
+              <div class="risk-score" id="riskScore">65.0%</div>
+              <div class="risk-category" id="riskCategory">MODERATE RISK</div>
+              <div style="font-size: 0.85rem; margin-top: 6px; opacity: 0.75;" id="patientIdLabel">Patient: PAT_0042</div>
+            </div>
+
+            <div style="margin-top: 24px;">
+              <h4 style="margin-bottom: 14px; font-size: 0.95rem; color: var(--text-secondary);">Clinical Feature Importance (SHAP)</h4>
+              <div id="shapBarsContainer">
+                <!-- Dynamic Feature Bars populated by JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: 3D MRI Neuroimaging Attribution -->
+          <div>
+            <div class="brain-viewer">
+              <h4 style="margin-bottom: 8px; color: var(--text-secondary); font-size: 0.9rem;">
+                3D MRI Structural Brain Slice (Hippocampal ROI Heatmap)
+              </h4>
+              <canvas id="mriCanvas" width="280" height="280"></canvas>
+              <div style="margin-top: 12px; font-size: 0.8rem; color: var(--text-secondary); text-align: center;">
+                Focal medial temporal lobe and bilateral hippocampal atrophy attribution overlay.
+              </div>
+            </div>
+
+            <!-- Terminal ASCII Preview -->
+            <div style="margin-top: 20px;">
+              <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary);">Terminal Report Card</h4>
+              <pre id="asciiReport" style="background: #000; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; font-size: 0.75rem; color: #38bdf8; overflow-x: auto; max-height: 200px;"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

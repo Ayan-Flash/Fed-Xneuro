@@ -30,6 +30,9 @@ class Trainer:
         weight_decay: float = 1e-4,
         proximal_mu: float = 0.0,
         global_parameters: Optional[Dict[str, torch.Tensor]] = None,
+        proximal_reference: Optional[Dict[str, torch.Tensor]] = None,
+        mu: float = 0.0,
+        control_variates: Optional[Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]] = None,
     ) -> Dict[str, Any]:
         """
         Executes local training loop for the given number of epochs.
@@ -38,6 +41,8 @@ class Trainer:
         Returns:
             Dict containing training metrics (loss, accuracy, duration, samples_trained, total_batches).
         """
+        eff_mu = mu if mu > 0.0 else proximal_mu
+        eff_ref = proximal_reference if proximal_reference is not None else global_parameters
         model.to(self.device)
         model.train()
 
@@ -89,13 +94,13 @@ class Trainer:
                 loss = self.criterion(output, target)
 
                 # FedProx proximal regularization: (mu / 2) * sum(||w - w_global||^2)
-                if proximal_mu > 0.0 and global_parameters is not None:
+                if eff_mu > 0.0 and eff_ref is not None:
                     proximal_term = torch.tensor(0.0, device=self.device)
                     for name, param in model.named_parameters():
-                        if name in global_parameters:
-                            g_param = global_parameters[name].to(param.device)
+                        if name in eff_ref:
+                            g_param = eff_ref[name].to(param.device)
                             proximal_term = proximal_term + (param - g_param).norm(2) ** 2
-                    loss = loss + (proximal_mu / 2.0) * proximal_term
+                    loss = loss + (eff_mu / 2.0) * proximal_term
 
                 loss.backward()
 

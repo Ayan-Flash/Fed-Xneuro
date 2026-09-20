@@ -29,6 +29,7 @@ class FederatedServer:
         device: Optional[torch.device] = None,
         criterion: Optional[nn.Module] = None,
         dp_mechanism: Optional[Any] = None,
+        evaluator: Optional[Any] = None,
     ) -> None:
         self.device = device or torch.device("cpu")
         self.global_model = global_model.to(self.device)
@@ -37,6 +38,7 @@ class FederatedServer:
         self.test_dataset = test_dataset
         self.criterion = criterion or nn.CrossEntropyLoss()
         self.dp_mechanism = dp_mechanism
+        self.evaluator = evaluator
 
         self.clients: Dict[str, FederatedClient] = {}
         self.communication_tracker = CommunicationTracker(
@@ -119,10 +121,21 @@ class FederatedServer:
         dev_params = {k: v.to(self.device) for k, v in aggregated_params.items()}
         self.global_model.load_state_dict(dev_params, strict=True)
 
-    def evaluate_global_model(self) -> Dict[str, float]:
+    def evaluate_global_model(self) -> Dict[str, Any]:
         """Evaluates global model on the global test dataset."""
         if self.test_dataset is None or len(self.test_dataset) == 0:
             return {"loss": 0.0, "accuracy": 0.0}
+
+        if self.evaluator is not None:
+            eval_res = self.evaluator.evaluate(self.global_model, self.test_dataset)
+            res = {
+                "loss": float(eval_res.get("loss", 0.0)),
+                "accuracy": float(eval_res.get("accuracy", 0.0)),
+            }
+            if "predictions" in eval_res and "targets" in eval_res:
+                res["predictions"] = eval_res["predictions"]
+                res["targets"] = eval_res["targets"]
+            return res
 
         loss = calculate_loss(
             model=self.global_model,

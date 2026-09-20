@@ -236,9 +236,11 @@ class MultimodalDatasetManager(BaseDatasetManager):
         return self.train_dataset, self.test_dataset
 
     def get_targets(self) -> np.ndarray:
-        if self.dataset is None:
+        if self.train_dataset is None:
             self.load_data()
-        return self.dataset.get_labels()
+        all_labels = self.dataset.get_labels()
+        train_indices = self.train_dataset.indices
+        return all_labels[train_indices]
 
     def get_metadata(self) -> Dict[str, Any]:
         return {

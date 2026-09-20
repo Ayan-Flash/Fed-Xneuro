@@ -1,0 +1,16 @@
+{
+  "source": "oasis",
+  "total_patients": 80,
+  "converters": 28,
+  "stables": 52,
+  "train_patients": 64,
+  "test_patients": 16,
+  "mri_shape": [
+    16,
+    16,
+    16
+  ],
+  "train_cohort_file": "TRAIN/data/processed/oasis\\train_cohort.pt",
+  "test_cohort_file": "TRAIN/data/processed/oasis\\test_cohort.pt",
+  "zero_leakage_verified": true
+}

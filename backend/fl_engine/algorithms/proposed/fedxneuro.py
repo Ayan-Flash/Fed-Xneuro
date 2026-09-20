@@ -230,7 +230,7 @@ class FedXNeuroClient:
         dev_params = {k: v.to(self.device) for k, v in parameters.items()}
         self.model.load_state_dict(dev_params, strict=True)
 
-    def train(self) -> Dict[str, Any]:
+    def train(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """
         Executes private local training on hospital cohort.
         """

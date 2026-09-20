@@ -2,6 +2,8 @@ import os
 import json
 from typing import Dict, List, Any, Optional
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
