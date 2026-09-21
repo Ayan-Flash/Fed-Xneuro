@@ -91,7 +91,8 @@ async def test_simulation_crud_lifecycle(async_client: httpx.AsyncClient):
 
     r_dashboard = await async_client.get(f"/api/v1/results/{sim_id}/clinician-dashboard")
     assert r_dashboard.status_code == 200
-    assert "FED-XNEURO DASHBOARD" in r_dashboard.json()["ascii"]
+    assert r_dashboard.json()["status"] == "no_report_available"
+    assert r_dashboard.json()["report"] is None
 
     r_del = await async_client.delete(f"/api/v1/simulations/{sim_id}")
     assert r_del.status_code == 204

@@ -49,26 +49,19 @@ def get_clinician_dashboard(simulation_id: int, db: Session = Depends(get_db)):
             pass
 
     if report is None:
-        report = {
-            "patient_id": f"PAT_{sim.run_id[:8]}",
-            "risk_probability": 0.65,
-            "risk_category": "MODERATE",
-            "clinical_importance": [
-                {"feature": "MMSE Decline", "importance": 0.42, "relative_pct": 32.0},
-                {"feature": "CDR-SB", "importance": 0.35, "relative_pct": 27.0},
-                {"feature": "APOE4", "importance": 0.22, "relative_pct": 17.0},
-                {"feature": "Age", "importance": 0.15, "relative_pct": 12.0},
-            ],
-            "mri_attribution": {
-                "hippocampus_importance_pct": 28.5,
-                "peak_attribution_voxel": [4, 8, 8],
-            },
-            "longitudinal_visit_weights": [0.15, 0.18, 0.20, 0.22, 0.25],
+        return {
+            "simulation_id": simulation_id,
+            "run_id": sim.run_id,
+            "status": "no_report_available",
+            "report": None,
+            "message": "No clinician diagnostic report generated for this simulation yet. Evaluate with a trained Fed-XNeuro model on patient data to generate real attributions.",
+            "ascii": None,
         }
 
     return {
         "simulation_id": simulation_id,
         "run_id": sim.run_id,
+        "status": "available",
         "report": report,
         "ascii": ClinicianDashboard.render_ascii(report),
     }

@@ -1,85 +1,85 @@
 {
-  "patient_id": "PAT_0029",
-  "risk_probability": 0.3488,
-  "risk_category": "MODERATE",
+  "patient_id": "PAT_0069",
+  "risk_probability": 0.0321,
+  "risk_category": "LOW",
   "clinical_importance": [
-    {
-      "feature": "Systolic-BP",
-      "importance": 0.0,
-      "relative_pct": 51.7
-    },
     {
       "feature": "BMI",
       "importance": 0.0,
-      "relative_pct": 15.7
-    },
-    {
-      "feature": "Sex",
-      "importance": 0.0,
-      "relative_pct": 12.3
-    },
-    {
-      "feature": "Education",
-      "importance": 0.0,
-      "relative_pct": 5.6
-    },
-    {
-      "feature": "Cholesterol",
-      "importance": 0.0,
-      "relative_pct": 4.8
+      "relative_pct": 29.5
     },
     {
       "feature": "ADAS-Cog13",
       "importance": 0.0,
-      "relative_pct": 2.7
+      "relative_pct": 17.6
+    },
+    {
+      "feature": "Sex",
+      "importance": 0.0,
+      "relative_pct": 8.9
     },
     {
       "feature": "ADAS-Cog11",
       "importance": 0.0,
-      "relative_pct": 2.0
+      "relative_pct": 8.8
     },
     {
-      "feature": "FAQ",
+      "feature": "Education",
       "importance": 0.0,
-      "relative_pct": 2.0
-    },
-    {
-      "feature": "Age",
-      "importance": 0.0,
-      "relative_pct": 1.5
-    },
-    {
-      "feature": "MMSE",
-      "importance": 0.0,
-      "relative_pct": 1.0
+      "relative_pct": 6.0
     },
     {
       "feature": "CDR-SB",
       "importance": 0.0,
-      "relative_pct": 0.5
+      "relative_pct": 5.5
     },
     {
       "feature": "APOE4-Alleles",
       "importance": 0.0,
-      "relative_pct": 0.0
+      "relative_pct": 5.3
+    },
+    {
+      "feature": "FAQ",
+      "importance": 0.0,
+      "relative_pct": 4.7
+    },
+    {
+      "feature": "Systolic-BP",
+      "importance": 0.0,
+      "relative_pct": 4.4
+    },
+    {
+      "feature": "Age",
+      "importance": 0.0,
+      "relative_pct": 4.0
+    },
+    {
+      "feature": "MMSE",
+      "importance": 0.0,
+      "relative_pct": 3.1
+    },
+    {
+      "feature": "Cholesterol",
+      "importance": 0.0,
+      "relative_pct": 2.1
     }
   ],
-  "top_clinical_feature": "Systolic-BP",
+  "top_clinical_feature": "BMI",
   "mri_attribution": {
-    "hippocampus_importance_pct": 32.9,
+    "hippocampus_importance_pct": 36.6,
     "peak_attribution_voxel": [
-      5,
-      5,
-      5
+      2,
+      7,
+      7
     ],
-    "global_attribution_mean": 2.7537254698728475e-09
+    "global_attribution_mean": 0.0011694791028276086
   },
   "longitudinal_visit_weights": [
-    0.166,
-    0.167,
-    0.167,
-    0.167,
-    0.167,
-    0.166
+    0.175,
+    0.187,
+    0.138,
+    0.157,
+    0.139,
+    0.204
   ]
 }
