@@ -6,6 +6,7 @@ import {
   ClinicianDashboardResponse,
   getClinicianDashboard,
 } from "@/lib/api";
+import { IconBrain, IconBarChart, IconScan, IconMicroscope } from "@/components/Icons";
 
 interface ClinicianReportProps {
   simulation: Simulation | null;
@@ -19,11 +20,13 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
   const [data, setData] = useState<ClinicianDashboardResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [barsVisible, setBarsVisible] = useState(false);
   const brainCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     if (!simulation) {
       setData(null);
+      setBarsVisible(false);
       return;
     }
 
@@ -33,8 +36,13 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
       try {
         setIsLoading(true);
         setErrorMsg(null);
+        setBarsVisible(false);
         const res = await getClinicianDashboard(simulation.id);
-        if (mounted) setData(res);
+        if (mounted) {
+          setData(res);
+          // Trigger bar animation after mount
+          setTimeout(() => setBarsVisible(true), 100);
+        }
       } catch (err: unknown) {
         if (mounted) {
           setErrorMsg(err instanceof Error ? err.message : "Failed to load report");
@@ -50,7 +58,7 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
     };
   }, [simulation]);
 
-  // Render Real Brain Canvas if report has MRI attribution
+  // Render Brain Canvas if report has MRI attribution
   const drawBrainSlice = useCallback((riskProb: number) => {
     const canvas = brainCanvasRef.current;
     if (!canvas) return;
@@ -62,17 +70,17 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
     const cx = w / 2;
     const cy = h / 2;
 
-    ctx.fillStyle = "#030712";
+    ctx.fillStyle = "#1E2F3B";
     ctx.fillRect(0, 0, w, h);
 
     // Outer brain parenchymal contour
-    ctx.fillStyle = "#1e293b";
+    ctx.fillStyle = "#2B4050";
     ctx.beginPath();
     ctx.ellipse(cx, cy, w * 0.38, h * 0.44, 0, 0, Math.PI * 2);
     ctx.fill();
 
     // Cortical gyri / sulci lines
-    ctx.strokeStyle = "#334155";
+    ctx.strokeStyle = "#435C6E";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(cx - 25, cy - 15, 38, 0.2, Math.PI * 0.9);
@@ -80,7 +88,7 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
     ctx.stroke();
 
     // Ventricles
-    ctx.fillStyle = "#0b0f19";
+    ctx.fillStyle = "#16232D";
     ctx.beginPath();
     const vScale = 1.0 + riskProb * 0.6;
     ctx.ellipse(cx, cy - 6, 12 * vScale, 24 * vScale, 0, 0, Math.PI * 2);
@@ -89,10 +97,10 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
     // Bilateral Hippocampal Atrophy ROI Heatmap Overlay
     const hippoColor =
       riskProb > 0.7
-        ? "rgba(239, 68, 68, 0.85)"
+        ? "rgba(201, 130, 130, 0.9)"
         : riskProb > 0.3
-        ? "rgba(245, 158, 11, 0.85)"
-        : "rgba(16, 185, 129, 0.85)";
+        ? "rgba(213, 182, 106, 0.9)"
+        : "rgba(127, 166, 138, 0.9)";
 
     // Left Hippocampus
     const gradL = ctx.createRadialGradient(cx - 36, cy + 15, 2, cx - 36, cy + 15, 20);
@@ -113,8 +121,8 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
     ctx.fill();
 
     // Labels
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "10px sans-serif";
+    ctx.fillStyle = "#E4EEE5";
+    ctx.font = "10px 'Inter', sans-serif";
     ctx.fillText("L Hippocampus", cx - 70, cy + 42);
     ctx.fillText("R Hippocampus", cx + 16, cy + 42);
   }, []);
@@ -129,10 +137,10 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
     return (
       <div className="card">
         <div className="empty-state">
-          <div className="empty-state-icon">🧠</div>
+          <div className="empty-state-icon"><IconBrain size={42} color="var(--text-muted)" /></div>
           <div className="empty-state-title">No Simulation Selected</div>
           <div className="empty-state-desc">
-            Please select an experiment from the &quot;Experiments &amp; Launcher&quot; tab to inspect patient progression risks, SHAP attributions, and neuroimaging overlays.
+            Select an experiment from the Experiments tab to view patient progression risks, SHAP feature attributions, and neuroimaging heatmaps.
           </div>
           <button type="button" className="btn btn-secondary" onClick={onSelectAnother}>
             Go to Experiments
@@ -144,9 +152,15 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
 
   if (isLoading) {
     return (
-      <div className="card">
-        <div style={{ textAlign: "center", padding: "3rem", color: "var(--text-secondary)" }}>
-          Loading clinician diagnostic report for #{simulation.id}...
+      <div className="card animate-tab-slide">
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", padding: "2rem" }}>
+          <div className="shimmer" style={{ height: "24px", width: "60%" }} />
+          <div className="shimmer" style={{ height: "120px", width: "100%" }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+            <div className="shimmer" style={{ height: "160px" }} />
+            <div className="shimmer" style={{ height: "160px" }} />
+            <div className="shimmer" style={{ height: "160px" }} />
+          </div>
         </div>
       </div>
     );
@@ -155,25 +169,15 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
   if (errorMsg) {
     return (
       <div className="card">
-        <div
-          style={{
-            background: "rgba(244, 63, 94, 0.15)",
-            border: "1px solid rgba(244, 63, 94, 0.3)",
-            color: "#fb7185",
-            padding: "1rem",
-            borderRadius: "var(--radius-sm)",
-          }}
-        >
-          {errorMsg}
-        </div>
+        <div className="alert-error">{errorMsg}</div>
       </div>
     );
   }
 
-  // Pure blank state when no report exists (Zero mock data)
+  // Blank state when no report exists
   if (!data?.report) {
     return (
-      <div className="grid-1">
+      <div className="grid-1 animate-tab-slide">
         <div className="card">
           <div
             style={{
@@ -186,28 +190,25 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
           >
             <div>
               <div className="card-title">
-                <span>🧠</span> Clinician Diagnostic View: {simulation.name} (#{simulation.id})
+                <IconBrain size={20} /> Clinician Diagnostic View: {simulation.name}
               </div>
               <div className="card-desc">
-                Model: <strong>{simulation.model}</strong> | Dataset: <strong>{simulation.dataset}</strong> | Status: <strong>{simulation.status}</strong>
+                Model: <strong>{simulation.model}</strong> · Dataset: <strong>{simulation.dataset}</strong> · Status: <strong>{simulation.status}</strong>
               </div>
             </div>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onSelectAnother}>
-              Change Simulation
+              Change
             </button>
           </div>
         </div>
 
         <div className="card">
           <div className="empty-state">
-            <div className="empty-state-icon">🔬</div>
-            <div className="empty-state-title">No Clinician Diagnostic Data Available</div>
+            <div className="empty-state-icon"><IconMicroscope size={42} color="var(--text-muted)" /></div>
+            <div className="empty-state-title">No Diagnostic Data Available</div>
             <div className="empty-state-desc">
-              Simulation #{simulation.id} has not produced a patient-level clinician progression report.
-              <br /><br />
-              When you test with your trained multimodal <strong>Fed-XNeuro</strong> model on patient cohort data (MRI + Cognitive Scores + EHR), actual MCI &rarr; Alzheimer&apos;s progression probabilities, SHAP clinical feature bars, and hippocampal atrophy heatmaps will appear here.
-              <br /><br />
-              <strong style={{ color: "var(--emerald)" }}>All mock data has been removed.</strong> Only verified outputs from your models will be displayed.
+              This simulation has not produced a patient-level clinician report yet.
+              When your trained <strong>Fed-XNeuro</strong> model processes patient cohort data (MRI + Cognitive Scores + EHR), progression probabilities, SHAP attributions, and hippocampal atrophy heatmaps will appear here.
             </div>
             <button type="button" className="btn btn-primary" onClick={onSelectAnother}>
               Launch New Simulation
@@ -224,7 +225,7 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
   const categoryClass = riskCategory.toLowerCase();
 
   return (
-    <div className="grid-1">
+    <div className="grid-1 animate-tab-slide">
       {/* Top Header */}
       <div className="card">
         <div
@@ -238,34 +239,34 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
         >
           <div>
             <div className="card-title">
-              <span>🧠</span> Clinician Diagnostic View: {simulation.name} (#{simulation.id})
+              <IconBrain size={20} /> Clinician Diagnostic View: {simulation.name}
             </div>
             <div className="card-desc">
-              Verified patient explainability report for patient <strong>{report.patient_id || "Anonymous"}</strong>
+              Patient explainability report for <strong>{report.patient_id || "Anonymous"}</strong>
             </div>
           </div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onSelectAnother}>
-            Change Simulation
+            Change
           </button>
         </div>
       </div>
 
       {/* Main Diagnostic Grid */}
       <div className="grid-3">
-        {/* Risk Assessment Gauge */}
+        {/* Risk Assessment */}
         <div className={`risk-card ${categoryClass}`}>
-          <div className="stat-label">Progression Risk Score</div>
+          <div className="stat-label">Progression Risk</div>
           <div className="risk-score">{(riskProb * 100).toFixed(1)}%</div>
           <div className="risk-label">{riskCategory} RISK</div>
           <div className="stat-subtext" style={{ marginTop: "1rem" }}>
-            MCI &rarr; Alzheimer&apos;s Disease Conversion Probability
+            MCI → Alzheimer&apos;s Conversion
           </div>
         </div>
 
         {/* Feature Importance (SHAP) */}
         <div className="card">
           <div className="card-title" style={{ fontSize: "1rem", marginBottom: "1rem" }}>
-            <span>📊</span> Clinical Feature Importance (SHAP)
+            <IconBarChart size={16} /> Clinical Feature Importance
           </div>
 
           {!report.clinical_importance || report.clinical_importance.length === 0 ? (
@@ -274,7 +275,11 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
             </div>
           ) : (
             report.clinical_importance.map((item, idx) => (
-              <div key={idx} className="feature-row">
+              <div
+                key={idx}
+                className="feature-row"
+                style={{ animationDelay: `${idx * 0.08}s` }}
+              >
                 <div className="feature-header">
                   <span className="feature-name">{item.feature}</span>
                   <span className="feature-pct">{item.relative_pct.toFixed(1)}%</span>
@@ -282,7 +287,12 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
                 <div className="feature-bar-bg">
                   <div
                     className="feature-bar-fill"
-                    style={{ width: `${Math.min(100, item.relative_pct * 2.5)}%` }}
+                    style={{
+                      width: barsVisible
+                        ? `${Math.min(100, item.relative_pct * 2.5)}%`
+                        : "0%",
+                      animationDelay: `${idx * 0.1}s`,
+                    }}
                   />
                 </div>
               </div>
@@ -293,11 +303,11 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
         {/* 3D MRI Brain Slice Visualization */}
         <div className="card" style={{ textAlign: "center" }}>
           <div className="card-title" style={{ fontSize: "1rem", marginBottom: "0.5rem" }}>
-            <span>🧩</span> MRI Neuroimaging ROI Heatmap
+            <IconScan size={16} /> MRI Neuroimaging Heatmap
           </div>
           <div className="card-desc" style={{ marginBottom: "1rem" }}>
-            Hippocampal Atrophy Attribution:{" "}
-            <strong style={{ color: "var(--cyan)" }}>
+            Hippocampal Atrophy:{" "}
+            <strong style={{ color: "var(--primary)" }}>
               {report.mri_attribution?.hippocampus_importance_pct !== undefined
                 ? `${report.mri_attribution.hippocampus_importance_pct.toFixed(1)}%`
                 : "—"}
@@ -314,24 +324,8 @@ export const ClinicianReport: React.FC<ClinicianReportProps> = ({
           >
             <canvas ref={brainCanvasRef} style={{ maxWidth: "100%", height: "auto" }} />
           </div>
-
-          {report.mri_attribution?.peak_attribution_voxel && (
-            <div style={{ marginTop: "0.75rem", fontSize: "0.75rem", color: "var(--text-muted)" }}>
-              Peak Attribution Voxel: {JSON.stringify(report.mri_attribution.peak_attribution_voxel)}
-            </div>
-          )}
         </div>
       </div>
-
-      {/* ASCII Diagnostic Report */}
-      {data.ascii && (
-        <div className="card">
-          <div className="card-title" style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>
-            <span>📄</span> Clinician Terminal Summary
-          </div>
-          <pre className="code-block">{data.ascii}</pre>
-        </div>
-      )}
     </div>
   );
 };

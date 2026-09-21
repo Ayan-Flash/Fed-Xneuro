@@ -2,13 +2,15 @@
 
 import React, { useEffect, useState } from "react";
 import { checkBackendHealth } from "@/lib/api";
+import { IconMicroscope, IconChartUp, IconBrain } from "@/components/Icons";
 
 interface NavbarProps {
   activeTab: "simulations" | "telemetry" | "clinician";
   onTabChange: (tab: "simulations" | "telemetry" | "clinician") => void;
+  role?: string;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange, role = "clinician" }) => {
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -27,20 +29,27 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
     };
   }, []);
 
+  const isClinician = role === "clinician";
+  const isResearcher = role === "researcher";
+  const isAdmin = role === "admin";
+
   return (
     <>
       <header className="header">
         <div className="brand">
           <div className="brand-icon">X</div>
           <div>
-            <div className="brand-title">FED-XNEURO PLATFORM</div>
+            <div className="brand-title">FED-XNEURO</div>
             <div className="brand-subtitle">
-              Next.js Clinician &amp; Research Federated Learning Dashboard
+              Federated Clinical AI for Alzheimer&apos;s Progression
             </div>
           </div>
         </div>
 
-        <div className="header-status">
+        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
+          <div className="badge badge-created" style={{ background: "rgba(25, 124, 130, 0.1)", color: "var(--primary)" }}>
+            {isClinician ? "Clinician Mode" : isResearcher ? "Researcher Mode" : "Admin Mode"}
+          </div>
           <div className="status-badge">
             <span
               className={`status-dot ${
@@ -49,10 +58,10 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
             />
             <span>
               {isOnline === null
-                ? "Connecting to API..."
+                ? "Connecting…"
                 : isOnline
-                ? "Backend Online (:8000)"
-                : "Backend Offline"}
+                ? "System Online"
+                : "System Offline"}
             </span>
           </div>
         </div>
@@ -64,24 +73,28 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
           className={`tab-btn ${activeTab === "simulations" ? "active" : ""}`}
           onClick={() => onTabChange("simulations")}
         >
-          <span>🔬</span> Experiments &amp; Launcher
+          <IconMicroscope size={16} /> {isClinician ? "Case History" : "Experiments"}
         </button>
 
-        <button
-          type="button"
-          className={`tab-btn ${activeTab === "telemetry" ? "active" : ""}`}
-          onClick={() => onTabChange("telemetry")}
-        >
-          <span>📈</span> Live FL Telemetry
-        </button>
+        {(isResearcher || isAdmin) && (
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === "telemetry" ? "active" : ""}`}
+            onClick={() => onTabChange("telemetry")}
+          >
+            <IconChartUp size={16} /> Live Telemetry
+          </button>
+        )}
 
-        <button
-          type="button"
-          className={`tab-btn ${activeTab === "clinician" ? "active" : ""}`}
-          onClick={() => onTabChange("clinician")}
-        >
-          <span>🧠</span> Clinician Diagnostic XAI
-        </button>
+        {isClinician && (
+          <button
+            type="button"
+            className={`tab-btn ${activeTab === "clinician" ? "active" : ""}`}
+            onClick={() => onTabChange("clinician")}
+          >
+            <IconBrain size={16} /> Clinician XAI
+          </button>
+        )}
       </nav>
     </>
   );
