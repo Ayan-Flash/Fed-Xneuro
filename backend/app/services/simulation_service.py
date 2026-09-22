@@ -59,15 +59,8 @@ class SimulationService:
         return sim
 
     @staticmethod
-    def list_simulations(db: Session, skip: int = 0, limit: int = 50, role: Optional[str] = None) -> List[Simulation]:
-        query = db.query(Simulation)
-        
-        if role == "clinician":
-            query = query.filter(Simulation.status == "completed")
-        elif role == "admin":
-            query = query.filter(Simulation.status.in_(["running", "failed"]))
-            
-        return query.order_by(Simulation.id.desc()).offset(skip).limit(limit).all()
+    def list_simulations(db: Session, skip: int = 0, limit: int = 50) -> List[Simulation]:
+        return db.query(Simulation).order_by(Simulation.id.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
     def delete_simulation(db: Session, sim_id: int) -> bool:

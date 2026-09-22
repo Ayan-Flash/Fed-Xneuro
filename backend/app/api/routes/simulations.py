@@ -24,12 +24,10 @@ def create_simulation(sim_in: SimulationCreate, db: Session = Depends(get_db)):
     return SimulationService.create_simulation(db, sim_in)
 
 
-from typing import List, Optional
-
 @router.get("", response_model=List[SimulationResponse])
-def list_simulations(skip: int = 0, limit: int = 50, role: Optional[str] = None, db: Session = Depends(get_db)):
+def list_simulations(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """Lists recent simulations."""
-    return SimulationService.list_simulations(db, skip=skip, limit=limit, role=role)
+    return SimulationService.list_simulations(db, skip=skip, limit=limit)
 
 
 @router.get("/{simulation_id}", response_model=SimulationResponse)
