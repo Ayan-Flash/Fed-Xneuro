@@ -31,14 +31,9 @@ export default function HospitalDashboard() {
     <div className="p-6 lg:p-8 max-w-7xl mx-auto animate-fade-in-up">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-bold text-[var(--color-text-main)]">
-              {greeting}, Dr. Jenkins
-            </h1>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--color-light-teal)] text-[var(--color-primary)]">
-              St. Jude Node
-            </span>
-          </div>
+          <h1 className="text-2xl font-bold text-[var(--color-text-main)]">
+            {greeting}, Dr. Jenkins
+          </h1>
           <p className="text-gray-500 text-sm mt-1">Here is your clinical patient cohort overview for today.</p>
         </div>
         <Link 

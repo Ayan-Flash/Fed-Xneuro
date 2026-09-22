@@ -130,9 +130,6 @@ export default function LandingPage() {
       <section id="how-it-works" className="py-10 sm:py-12 bg-[var(--color-bg)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--color-light-teal)] text-[var(--color-primary)] text-xs font-semibold uppercase tracking-wider mb-2">
-              Step-by-step
-            </div>
             <h2 className="text-3xl font-bold text-[var(--color-text-main)] mb-3">How It Works</h2>
             <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">A streamlined clinical workflow designed for efficiency, clarity, and precision.</p>
           </div>
@@ -166,9 +163,6 @@ export default function LandingPage() {
       <section id="features" className="py-10 sm:py-12 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--color-light-teal)] text-[var(--color-primary)] text-xs font-semibold uppercase tracking-wider mb-2">
-              Capabilities
-            </div>
             <h2 className="text-3xl font-bold text-[var(--color-text-main)] mb-3">Key Features</h2>
             <p className="text-base sm:text-lg text-gray-600 max-w-2xl mx-auto">Comprehensive tools built specifically for modern neurological and clinical environments.</p>
           </div>
@@ -198,10 +192,7 @@ export default function LandingPage() {
       <section id="about" className="py-10 sm:py-12 bg-[var(--color-bg)] border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center mb-8">
-            <span className="text-xs font-bold uppercase tracking-widest text-[var(--color-primary)] bg-[var(--color-light-teal)] px-3.5 py-1 rounded-full border border-[var(--color-primary)]/20">
-              About The Platform
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text-main)] mt-3 mb-2">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text-main)] mb-2">
               Pioneering Privacy-First Federated Neuroscience
             </h2>
             <p className="text-base text-gray-600 leading-relaxed">
@@ -312,10 +303,7 @@ export default function LandingPage() {
       <section id="contact" className="py-10 sm:py-12 bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center mb-8">
-            <span className="text-xs font-bold uppercase tracking-widest text-[var(--color-primary)] bg-[var(--color-light-teal)] px-3.5 py-1 rounded-full border border-[var(--color-primary)]/20">
-              Get In Touch
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text-main)] mt-3 mb-2">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text-main)] mb-2">
               Connect With Our Clinical Team
             </h2>
             <p className="text-base text-gray-600 leading-relaxed">

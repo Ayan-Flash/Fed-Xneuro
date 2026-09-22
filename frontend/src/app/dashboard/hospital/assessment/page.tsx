@@ -84,14 +84,9 @@ export default function AssessmentPage() {
 
       {state === "input" && (
         <form onSubmit={handleSimulate} className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 sm:p-8">
-          <div className="flex items-center justify-between pb-4 mb-6 border-b border-gray-100">
-            <div>
-              <h2 className="text-lg font-bold text-[var(--color-text-main)]">Patient Clinical Parameters</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Input standard neuropsychological and demographic metrics</p>
-            </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-              Protocol: ADNI-3
-            </span>
+          <div className="pb-4 mb-6 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-[var(--color-text-main)]">Patient Clinical Parameters</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Input standard neuropsychological and demographic metrics</p>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">

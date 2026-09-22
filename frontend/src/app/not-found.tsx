@@ -12,12 +12,8 @@ export default function NotFound() {
           <IconBrain size={34} />
         </div>
 
-        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[var(--color-light-teal)] text-[var(--color-primary)] mb-3">
-          Error 404
-        </span>
-
         <h1 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text-main)] tracking-tight mb-2">
-          Resource Not Found
+          404 — Resource Not Found
         </h1>
 
         <p className="text-sm text-gray-500 mb-8 leading-relaxed">
