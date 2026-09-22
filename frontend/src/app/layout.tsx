@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Fed-XNeuro — Federated Clinical AI Platform",
-  description: "Next.js Clinician & Researcher Dashboard for Multimodal Explainable Federated Learning",
+  description: "Clinician & Researcher Dashboard for Multimodal Explainable Federated Learning in Alzheimer's Progression Prediction",
 };
 
 export default function RootLayout({
@@ -13,6 +13,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body>{children}</body>
     </html>
   );

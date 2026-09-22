@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Rocket, Settings, Database, Cpu, Network, Users } from "lucide-react";
 import {
   ModelInfo,
   DatasetInfo,
@@ -13,6 +12,7 @@ import {
   createSimulation,
   startSimulation,
 } from "@/lib/api";
+import { IconRocket, IconGear, IconCheck, IconChevronDown } from "@/components/Icons";
 
 interface SimulationLauncherProps {
   onLaunched: (simulation: Simulation) => void;
@@ -25,6 +25,9 @@ export const SimulationLauncher: React.FC<SimulationLauncherProps> = ({ onLaunch
   const [isLoadingMeta, setIsLoadingMeta] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastName, setToastName] = useState("");
 
   // Form State
   const [name, setName] = useState("Fed-XNeuro Experiment");
@@ -85,13 +88,13 @@ export const SimulationLauncher: React.FC<SimulationLauncherProps> = ({ onLaunch
         dp_epsilon: dpEpsilon ? parseFloat(dpEpsilon) : undefined,
       };
 
-      // 1. Create Simulation in DB
       const created = await createSimulation(payload);
-
-      // 2. Start Simulation Worker
       await startSimulation(created.id);
 
-      // 3. Notify parent
+      setToastName(created.name);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3500);
+
       onLaunched(created);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to launch simulation";
@@ -102,148 +105,247 @@ export const SimulationLauncher: React.FC<SimulationLauncherProps> = ({ onLaunch
   }
 
   return (
-    <div className="card">
-      <div className="card-header border-b border-[var(--border-color)] pb-4 mb-4">
-        <div className="card-title flex items-center gap-2">
-          <Rocket className="text-[var(--primary)]" size={24} /> Launch Federated Simulation
-        </div>
-        <div className="card-desc mt-1">
-          Configure and initiate decentralized training across simulated hospital nodes with your models and datasets.
-        </div>
-      </div>
-
-      {errorMsg && (
-        <div className="bg-[var(--crimson-glow)] border border-[var(--crimson)] text-[var(--crimson)] px-4 py-3 rounded-[var(--radius-sm)] mb-4 text-sm font-medium">
-          {errorMsg}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit}>
-        <div className="form-group mb-4">
-          <label className="form-label flex items-center gap-1.5 text-sm font-semibold mb-1" htmlFor="simName">
-            <Settings size={16} className="text-[var(--text-muted)]" /> Simulation Name
-          </label>
-          <input
-            id="simName"
-            type="text"
-            className="form-control w-full border border-[var(--border-color)] rounded-[var(--radius-sm)] px-3 py-2 focus:ring-2 focus:ring-[var(--primary-glow)] focus:border-[var(--primary)] outline-none transition-all"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            disabled={isSubmitting}
-          />
-        </div>
-
-        <div className="grid-2 gap-4 mb-4">
-          <div className="form-group">
-            <label className="form-label flex items-center gap-1.5 text-sm font-semibold mb-1" htmlFor="simDataset">
-              <Database size={16} className="text-[var(--text-muted)]" /> Dataset
-            </label>
-            <select
-              id="simDataset"
-              className="form-control w-full border border-[var(--border-color)] rounded-[var(--radius-sm)] px-3 py-2 bg-white focus:ring-2 focus:ring-[var(--primary-glow)] focus:border-[var(--primary)] outline-none transition-all"
-              value={dataset}
-              onChange={(e) => setDataset(e.target.value)}
-              disabled={isLoadingMeta || isSubmitting}
-            >
-              {datasets.length === 0 ? (
-                <option value="multimodal">ADNI Multimodal (MRI + Cog + EHR)</option>
-              ) : (
-                datasets.map((d) => (
-                  <option key={d.name} value={d.name}>
-                    {d.display_name} ({d.data_type})
-                  </option>
-                ))
-              )}
-            </select>
+    <>
+      <div className="card">
+        <div className="card-header">
+          <div className="card-title">
+            <IconRocket size={20} /> Launch Simulation
           </div>
-
-          <div className="form-group">
-            <label className="form-label flex items-center gap-1.5 text-sm font-semibold mb-1" htmlFor="simModel">
-              <Cpu size={16} className="text-[var(--text-muted)]" /> Neural Architecture
-            </label>
-            <select
-              id="simModel"
-              className="form-control w-full border border-[var(--border-color)] rounded-[var(--radius-sm)] px-3 py-2 bg-white focus:ring-2 focus:ring-[var(--primary-glow)] focus:border-[var(--primary)] outline-none transition-all"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              disabled={isLoadingMeta || isSubmitting}
-            >
-              {models.length === 0 ? (
-                <option value="fedxneuro">Fed-XNeuro (3D ResNet + Transformer)</option>
-              ) : (
-                models.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.display_name} ({m.architecture_type})
-                  </option>
-                ))
-              )}
-            </select>
+          <div className="card-desc">
+            Configure and run decentralized federated training across simulated hospital nodes.
           </div>
         </div>
 
-        <div className="grid-2 gap-4 mb-4">
-          <div className="form-group">
-            <label className="form-label flex items-center gap-1.5 text-sm font-semibold mb-1" htmlFor="simAlgorithm">
-              <Network size={16} className="text-[var(--text-muted)]" /> FL Aggregation Algorithm
-            </label>
-            <select
-              id="simAlgorithm"
-              className="form-control w-full border border-[var(--border-color)] rounded-[var(--radius-sm)] px-3 py-2 bg-white focus:ring-2 focus:ring-[var(--primary-glow)] focus:border-[var(--primary)] outline-none transition-all"
-              value={algorithm}
-              onChange={(e) => setAlgorithm(e.target.value)}
-              disabled={isLoadingMeta || isSubmitting}
-            >
-              {algorithms.length === 0 ? (
-                <option value="fedxneuro">Fed-XNeuro (Sample-Weighted)</option>
-              ) : (
-                algorithms.map((a) => (
-                  <option key={a.name} value={a.name}>
-                    {a.display_name}
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+        {errorMsg && <div className="alert-error">{errorMsg}</div>}
 
+        <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label className="form-label flex items-center gap-1.5 text-sm font-semibold mb-1" htmlFor="simClients">
-              <Users size={16} className="text-[var(--text-muted)]" /> Hospital Clients
+            <label className="form-label" htmlFor="simName">
+              Experiment Name
             </label>
             <input
-              id="simClients"
-              type="number"
-              className="form-control w-full border border-[var(--border-color)] rounded-[var(--radius-sm)] px-3 py-2 focus:ring-2 focus:ring-[var(--primary-glow)] focus:border-[var(--primary)] outline-none transition-all"
-              min={1}
-              max={20}
-              value={numClients}
-              onChange={(e) => setNumClients(parseInt(e.target.value) || 1)}
+              id="simName"
+              type="text"
+              className="form-control"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               required
               disabled={isSubmitting}
             />
           </div>
+
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label" htmlFor="simDataset">
+                Dataset
+              </label>
+              <select
+                id="simDataset"
+                className="form-control"
+                value={dataset}
+                onChange={(e) => setDataset(e.target.value)}
+                disabled={isLoadingMeta || isSubmitting}
+              >
+                {datasets.length === 0 ? (
+                  <option value="multimodal">ADNI Multimodal (MRI + Cog + EHR)</option>
+                ) : (
+                  datasets.map((d) => (
+                    <option key={d.name} value={d.name}>
+                      {d.display_name} ({d.data_type})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="simModel">
+                Neural Architecture
+              </label>
+              <select
+                id="simModel"
+                className="form-control"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={isLoadingMeta || isSubmitting}
+              >
+                {models.length === 0 ? (
+                  <option value="fedxneuro">Fed-XNeuro (3D ResNet + Transformer)</option>
+                ) : (
+                  models.map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {m.display_name} ({m.architecture_type})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label" htmlFor="simAlgorithm">
+                FL Algorithm
+              </label>
+              <select
+                id="simAlgorithm"
+                className="form-control"
+                value={algorithm}
+                onChange={(e) => setAlgorithm(e.target.value)}
+                disabled={isLoadingMeta || isSubmitting}
+              >
+                {algorithms.length === 0 ? (
+                  <option value="fedxneuro">Fed-XNeuro (Sample-Weighted)</option>
+                ) : (
+                  algorithms.map((a) => (
+                    <option key={a.name} value={a.name}>
+                      {a.display_name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="simClients">
+                Hospital Clients
+              </label>
+              <input
+                id="simClients"
+                type="number"
+                className="form-control"
+                min={1}
+                max={20}
+                value={numClients}
+                onChange={(e) => setNumClients(parseInt(e.target.value) || 1)}
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="simRounds">
+              Communication Rounds
+            </label>
+            <input
+              id="simRounds"
+              type="number"
+              className="form-control"
+              min={1}
+              max={100}
+              value={numRounds}
+              onChange={(e) => setNumRounds(parseInt(e.target.value) || 1)}
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+
+          {/* Advanced Settings Accordion */}
+          <div style={{ marginBottom: "1rem" }}>
+            <button
+              type="button"
+              className={`accordion-trigger ${showAdvanced ? "open" : ""}`}
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <IconGear size={15} /> Advanced Training Parameters
+              </span>
+              <IconChevronDown size={14} className="chevron" />
+            </button>
+            <div className={`accordion-content ${showAdvanced ? "open" : ""}`}>
+              <div className="grid-3">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="simEpochs">
+                    Local Epochs
+                  </label>
+                  <input
+                    id="simEpochs"
+                    type="number"
+                    className="form-control"
+                    min={1}
+                    max={20}
+                    value={localEpochs}
+                    onChange={(e) => setLocalEpochs(parseInt(e.target.value) || 1)}
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="simBatch">
+                    Batch Size
+                  </label>
+                  <input
+                    id="simBatch"
+                    type="number"
+                    className="form-control"
+                    min={1}
+                    max={256}
+                    value={batchSize}
+                    onChange={(e) => setBatchSize(parseInt(e.target.value) || 1)}
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="simLr">
+                    Learning Rate
+                  </label>
+                  <input
+                    id="simLr"
+                    type="number"
+                    step="0.001"
+                    className="form-control"
+                    value={learningRate}
+                    onChange={(e) => setLearningRate(parseFloat(e.target.value) || 0.01)}
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="simDp">
+                  Differential Privacy ε (Optional)
+                </label>
+                <input
+                  id="simDp"
+                  type="number"
+                  step="0.1"
+                  placeholder="e.g. 5.0 — leave empty for no DP"
+                  className="form-control"
+                  value={dpEpsilon}
+                  onChange={(e) => setDpEpsilon(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className={`btn btn-primary ${isSubmitting ? "launching" : ""}`}
+            style={{ width: "100%", marginTop: "0.25rem" }}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              "Starting Simulation…"
+            ) : (
+              <><IconRocket size={16} /> Launch Federated Simulation</>
+            )}
+          </button>
+        </form>
+      </div>
+
+      {/* Success Toast */}
+      {showToast && (
+        <div className="toast-container">
+          <div className="toast success">
+            <IconCheck size={16} color="#a7f3d0" /> Simulation &ldquo;{toastName}&rdquo; launched successfully!
+          </div>
         </div>
-
-
-
-        <button
-          type="submit"
-          className="btn btn-primary w-full py-3 flex items-center justify-center gap-2 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-semibold rounded-[var(--radius-md)] transition-all shadow-md disabled:opacity-70"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-             <>
-               <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-               </svg>
-               Starting Simulation...
-             </>
-          ) : (
-            <><Rocket size={18} /> Launch Federated Simulation</>
-          )}
-        </button>
-      </form>
-    </div>
+      )}
+    </>
   );
 };

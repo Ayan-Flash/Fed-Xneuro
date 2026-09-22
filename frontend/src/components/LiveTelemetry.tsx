@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { Activity, LineChart, TrendingDown, Zap, SearchX } from "lucide-react";
 import {
   Simulation,
   MetricItem,
   getMetrics,
   getSimulationWebSocketUrl,
 } from "@/lib/api";
+import { IconSatellite, IconHourglass, IconLightning } from "@/components/Icons";
 
 interface LiveTelemetryProps {
   simulation: Simulation | null;
@@ -22,6 +22,45 @@ interface RoundEvent {
   timestamp: string;
 }
 
+/* Circular progress ring component */
+function ProgressRing({
+  current,
+  total,
+  size = 80,
+}: {
+  current: number;
+  total: number;
+  size?: number;
+}) {
+  const strokeWidth = 6;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = total > 0 ? current / total : 0;
+  const offset = circumference - pct * circumference;
+
+  return (
+    <div className="progress-ring-container" style={{ width: size, height: size }}>
+      <svg className="progress-ring-svg" width={size} height={size}>
+        <circle className="progress-ring-bg" cx={size / 2} cy={size / 2} r={radius} />
+        <circle
+          className="progress-ring-fill"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="progress-ring-text">
+        <span className="ring-value">
+          {current}/{total}
+        </span>
+        <span className="ring-label">Rounds</span>
+      </div>
+    </div>
+  );
+}
+
 export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   simulation,
   onSelectAnother,
@@ -33,6 +72,7 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   const [latestLoss, setLatestLoss] = useState<number | null>(null);
   const [latestEpsilon, setLatestEpsilon] = useState<number | null>(null);
   const [currentRound, setCurrentRound] = useState<number>(0);
+  const [showAllEvents, setShowAllEvents] = useState(false);
 
   const accCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lossCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -50,8 +90,8 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
     }
 
     setCurrentRound(simulation.current_round || 0);
-    setLatestAccuracy(simulation.final_accuracy);
-    setLatestLoss(simulation.final_loss);
+    setLatestAccuracy(simulation.final_accuracy ?? null);
+    setLatestLoss(simulation.final_loss ?? null);
 
     async function loadPastMetrics() {
       if (!simulation) return;
@@ -149,8 +189,8 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
     const accuracies = metrics.map((m) => m.accuracy);
     const losses = metrics.map((m) => m.loss);
 
-    drawChart(accCanvasRef.current, rounds, accuracies, "Accuracy (%)", "var(--secondary)");
-    drawChart(lossCanvasRef.current, rounds, losses, "Loss", "var(--crimson)");
+    drawChart(accCanvasRef.current, rounds, accuracies, "Accuracy (%)", "#7FA68A");
+    drawChart(lossCanvasRef.current, rounds, losses, "Loss", "#C98282");
   }, [simulation, metrics]);
 
   useEffect(() => {
@@ -162,15 +202,13 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
   if (!simulation) {
     return (
       <div className="card">
-        <div className="empty-state text-center py-12 px-4 rounded-[var(--radius-md)] border border-dashed border-[var(--border-color)] bg-white">
-          <div className="empty-state-icon flex justify-center mb-4">
-             <Activity size={48} className="text-[var(--border-color)]" />
+        <div className="empty-state">
+          <div className="empty-state-icon"><IconSatellite size={42} color="var(--text-muted)" /></div>
+          <div className="empty-state-title">No Active Telemetry</div>
+          <div className="empty-state-desc">
+            Select an experiment from the Experiments tab to view real-time training progress, accuracy curves, and privacy budget tracking.
           </div>
-          <div className="empty-state-title text-xl font-bold text-[var(--text-primary)] mb-2">No Active Telemetry Stream</div>
-          <div className="empty-state-desc text-[var(--text-secondary)] max-w-md mx-auto mb-6">
-            No simulation is currently selected for live telemetry streaming. Select an experiment from the &quot;Experiments &amp; Launcher&quot; tab to view real-time training progress, accuracy curves, and privacy accounting.
-          </div>
-          <button type="button" className="btn btn-secondary px-4 py-2 bg-white border border-[var(--border-color)] rounded-[var(--radius-sm)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors" onClick={onSelectAnother}>
+          <button type="button" className="btn btn-secondary" onClick={onSelectAnother}>
             Go to Experiments
           </button>
         </div>
@@ -178,8 +216,10 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
     );
   }
 
+  const visibleEvents = showAllEvents ? events : events.slice(0, 5);
+
   return (
-    <div className="grid-1">
+    <div className="grid-1 animate-tab-slide">
       {/* Telemetry Header */}
       <div className="card">
         <div
@@ -192,110 +232,105 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
           }}
         >
           <div>
-            <div className="card-title flex items-center gap-2">
-              <Activity className="text-[var(--primary)]" size={24} /> Live Telemetry: {simulation.name} (#{simulation.id})
+            <div className="card-title">
+              <IconSatellite size={20} /> Live Telemetry: {simulation.name}
             </div>
-            <div className="card-desc mt-1">
-              Streaming round-by-round global evaluation metrics via WebSocket for run{" "}
-              <code style={{ color: "var(--primary)", fontFamily: "var(--font-mono)" }}>
-                {simulation.run_id}
-              </code>
+            <div className="card-desc">
+              Streaming real-time global evaluation metrics via WebSocket
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <div className="status-badge flex items-center gap-2 bg-[var(--bg-secondary)] px-3 py-1.5 rounded-full border border-[var(--border-color)] text-sm font-medium">
+            <div className="status-badge">
               <span
-                className={`status-dot w-2.5 h-2.5 rounded-full ${
+                className={`status-dot ${
                   wsStatus === "connected"
-                    ? "bg-[var(--secondary)] animate-pulse"
+                    ? ""
                     : wsStatus === "completed"
-                    ? "bg-[var(--primary)]"
+                    ? ""
                     : wsStatus === "connecting"
-                    ? "bg-[var(--amber)]"
-                    : "bg-[var(--text-muted)]"
+                    ? "warning"
+                    : "offline"
                 }`}
               />
-              <span style={{ textTransform: "capitalize" }} className="text-[var(--text-primary)]">
+              <span>
                 {wsStatus === "connected"
-                  ? "Streaming Live"
+                  ? "Streaming"
                   : wsStatus === "completed"
-                  ? "Simulation Finished"
+                  ? "Finished"
                   : wsStatus === "connecting"
-                  ? "Connecting WS..."
-                  : "Standby / Closed"}
+                  ? "Connecting…"
+                  : "Standby"}
               </span>
             </div>
-            <button type="button" className="btn btn-secondary btn-sm bg-white border border-[var(--border-color)] text-[var(--text-primary)] px-3 py-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--bg-secondary)] transition-colors text-sm" onClick={onSelectAnother}>
-              Change Simulation
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onSelectAnother}>
+              Change
             </button>
           </div>
         </div>
 
-        {/* Real-time Metric Stat Cards */}
-        <div className="grid-4 mt-6 gap-4">
-          <div className="stat-card border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 bg-white shadow-sm">
-            <div className="stat-label text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Communication Round</div>
-            <div className="stat-value text-2xl font-bold text-[var(--text-primary)]">
-              {currentRound} / {simulation.num_rounds}
-            </div>
-            <div className="stat-subtext text-xs text-[var(--text-secondary)] mt-1">
-              {simulation.num_rounds > 0
-                ? `${Math.round((currentRound / simulation.num_rounds) * 100)}% progress`
-                : "—"}
-            </div>
+        {/* Stat Cards with Progress Ring */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "auto 1fr 1fr 1fr",
+            gap: "1.25rem",
+            marginTop: "1.5rem",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <ProgressRing current={currentRound} total={simulation.num_rounds} size={86} />
           </div>
 
-          <div className="stat-card border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 bg-white shadow-sm">
-            <div className="stat-label text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Global Accuracy</div>
-            <div className="stat-value text-2xl font-bold" style={{ color: "var(--secondary)" }}>
+          <div className="stat-card">
+            <div className="stat-label">Global Accuracy</div>
+            <div className="stat-value" style={{ color: "var(--primary)" }}>
               {latestAccuracy !== null && latestAccuracy !== undefined
                 ? `${latestAccuracy.toFixed(2)}%`
                 : "—"}
             </div>
-            <div className="stat-subtext text-xs text-[var(--text-secondary)] mt-1">Verified on held-out test split</div>
+            <div className="stat-subtext">Held-out test split</div>
           </div>
 
-          <div className="stat-card border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 bg-white shadow-sm">
-            <div className="stat-label text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Global Loss</div>
-            <div className="stat-value text-2xl font-bold" style={{ color: "var(--crimson)" }}>
+          <div className="stat-card">
+            <div className="stat-label">Global Loss</div>
+            <div className="stat-value" style={{ color: "var(--alert-color)" }}>
               {latestLoss !== null && latestLoss !== undefined
                 ? latestLoss.toFixed(4)
                 : "—"}
             </div>
-            <div className="stat-subtext text-xs text-[var(--text-secondary)] mt-1">Sample-weighted objective</div>
+            <div className="stat-subtext">Weighted objective</div>
           </div>
 
-          <div className="stat-card border border-[var(--border-color)] rounded-[var(--radius-md)] p-4 bg-white shadow-sm">
-            <div className="stat-label text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1">Privacy Budget Spent (&epsilon;)</div>
-            <div className="stat-value text-2xl font-bold" style={{ color: "var(--amber)" }}>
+          <div className="stat-card">
+            <div className="stat-label">Privacy ε</div>
+            <div className="stat-value" style={{ color: "var(--gold)" }}>
               {latestEpsilon !== null && latestEpsilon !== undefined
                 ? latestEpsilon.toFixed(2)
                 : "None"}
             </div>
-            <div className="stat-subtext text-xs text-[var(--text-secondary)] mt-1">Rényi Differential Privacy</div>
+            <div className="stat-subtext">Differential Privacy</div>
           </div>
         </div>
       </div>
 
-      {/* Real Charts or Blank State */}
+      {/* Charts or Blank State */}
       {metrics.length === 0 ? (
         <div className="card">
-          <div className="empty-state text-center py-12 px-4 rounded-[var(--radius-md)] border border-dashed border-[var(--border-color)] bg-white">
-            <div className="empty-state-icon flex justify-center mb-4">
-              <SearchX size={48} className="text-[var(--border-color)]" />
-            </div>
-            <div className="empty-state-title text-xl font-bold text-[var(--text-primary)] mb-2">Awaiting First Round Telemetry</div>
-            <div className="empty-state-desc text-[var(--text-secondary)] max-w-md mx-auto">
-              Simulation #{simulation.id} is preparing client nodes and data partitions. As soon as Round 1 completes, live accuracy and loss curves will appear here in real time.
+          <div className="empty-state">
+            <div className="empty-state-icon"><IconHourglass size={42} color="var(--text-muted)" /></div>
+            <div className="empty-state-title">Awaiting First Round</div>
+            <div className="empty-state-desc">
+              Preparing client nodes and data partitions. Live accuracy and loss curves will appear once Round 1 completes.
             </div>
           </div>
         </div>
       ) : (
-        <div className="grid-2 gap-4">
+        <div className="grid-2">
           <div className="card">
-            <div className="card-title flex items-center gap-2" style={{ fontSize: "1rem", color: "var(--secondary)" }}>
-              <LineChart size={18} /> Global Accuracy Curve
+            <div className="card-title" style={{ fontSize: "1rem", color: "var(--primary)" }}>
+              Accuracy Curve
             </div>
             <div style={{ width: "100%", height: "260px", marginTop: "1rem" }}>
               <canvas ref={accCanvasRef} style={{ width: "100%", height: "100%" }} />
@@ -303,8 +338,8 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
           </div>
 
           <div className="card">
-            <div className="card-title flex items-center gap-2" style={{ fontSize: "1rem", color: "var(--crimson)" }}>
-              <TrendingDown size={18} /> Global Loss Curve
+            <div className="card-title" style={{ fontSize: "1rem", color: "var(--alert-color)" }}>
+              Loss Curve
             </div>
             <div style={{ width: "100%", height: "260px", marginTop: "1rem" }}>
               <canvas ref={lossCanvasRef} style={{ width: "100%", height: "100%" }} />
@@ -313,48 +348,53 @@ export const LiveTelemetry: React.FC<LiveTelemetryProps> = ({
         </div>
       )}
 
-      {/* Live Event Stream */}
+      {/* Compact Event Feed */}
       {events.length > 0 && (
         <div className="card">
-          <div className="card-title flex items-center gap-2 mb-4" style={{ fontSize: "1rem" }}>
-            <Zap className="text-[var(--amber)]" size={18} /> Real-Time Communication Round Stream
+          <div className="card-title" style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>
+            <IconLightning size={16} /> Round Event Feed
           </div>
-          <div className="table-container overflow-x-auto">
-            <table className="data-table w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[var(--border-color)]">
-                  <th className="py-2 px-4 font-semibold text-xs text-[var(--text-muted)] uppercase tracking-wide">Round</th>
-                  <th className="py-2 px-4 font-semibold text-xs text-[var(--text-muted)] uppercase tracking-wide">Accuracy</th>
-                  <th className="py-2 px-4 font-semibold text-xs text-[var(--text-muted)] uppercase tracking-wide">Loss</th>
-                  <th className="py-2 px-4 font-semibold text-xs text-[var(--text-muted)] uppercase tracking-wide">Privacy Spent</th>
-                  <th className="py-2 px-4 font-semibold text-xs text-[var(--text-muted)] uppercase tracking-wide">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((evt, idx) => (
-                  <tr key={idx} className="border-b border-[var(--border-color)] hover:bg-[var(--bg-secondary)] transition-colors">
-                    <td className="py-2 px-4">
-                      <strong className="text-[var(--text-primary)]">Round {evt.round}</strong>
-                    </td>
-                    <td className="py-2 px-4" style={{ color: "var(--secondary)", fontWeight: 700 }}>
-                      {evt.accuracy.toFixed(2)}%
-                    </td>
-                    <td className="py-2 px-4" style={{ color: "var(--crimson)", fontFamily: "var(--font-mono)" }}>
-                      {evt.loss.toFixed(4)}
-                    </td>
-                    <td className="py-2 px-4 text-[var(--text-primary)]">
-                      {evt.privacy_budget_spent !== undefined
-                        ? `ε = ${evt.privacy_budget_spent.toFixed(2)}`
-                        : "—"}
-                    </td>
-                    <td className="py-2 px-4 text-[var(--text-muted)]" style={{ fontSize: "0.8rem" }}>
-                      {evt.timestamp}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          <div className="event-feed">
+            {visibleEvents.map((evt, idx) => (
+              <div
+                key={idx}
+                className="event-item"
+                style={{ animationDelay: `${idx * 0.04}s` }}
+              >
+                <div className="event-icon">R{evt.round}</div>
+                <div className="event-details">
+                  <span className="event-round">Round {evt.round}</span>
+                  <span className="event-metric" style={{ color: "var(--primary)" }}>
+                    Acc: {evt.accuracy.toFixed(2)}%
+                  </span>
+                  <span className="event-metric" style={{ color: "var(--alert-color)" }}>
+                    Loss: {evt.loss.toFixed(4)}
+                  </span>
+                  {evt.privacy_budget_spent !== undefined && (
+                    <span className="event-metric" style={{ color: "var(--gold)" }}>
+                      ε={evt.privacy_budget_spent.toFixed(2)}
+                    </span>
+                  )}
+                  <span className="event-time">{evt.timestamp}</span>
+                </div>
+              </div>
+            ))}
           </div>
+
+          {events.length > 5 && (
+            <div style={{ textAlign: "center", marginTop: "0.75rem" }}>
+              <button
+                type="button"
+                className="toggle-btn"
+                onClick={() => setShowAllEvents(!showAllEvents)}
+              >
+                {showAllEvents
+                  ? `Show Less`
+                  : `Show All ${events.length} Events`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -391,7 +431,7 @@ function drawChart(
   const maxY = Math.max(...yVals) * 1.05 || 1.0;
 
   // Grid Lines
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.05)";
+  ctx.strokeStyle = "rgba(38, 59, 74, 0.10)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   for (let i = 0; i <= 4; i++) {
@@ -402,29 +442,58 @@ function drawChart(
   ctx.stroke();
 
   // Y-axis labels
-  ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-  ctx.font = "10px sans-serif";
+  ctx.fillStyle = "rgba(38, 59, 74, 0.55)";
+  ctx.font = "11px 'Inter', sans-serif";
   ctx.textAlign = "right";
   for (let i = 0; i <= 4; i++) {
     const val = maxY - ((maxY - minY) / 4) * i;
     const y = padTop + (plotH / 4) * i;
-    ctx.fillText(val.toFixed(2), padLeft - 8, y + 3);
+    ctx.fillText(val.toFixed(2), padLeft - 8, y + 4);
   }
 
-  // Draw Path
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
+  // X-axis labels
+  ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(38, 59, 74, 0.45)";
+  for (let i = 0; i < xVals.length; i++) {
+    const x = padLeft + (xVals.length === 1 ? plotW / 2 : (i / (xVals.length - 1)) * plotW);
+    ctx.fillText(`R${xVals[i]}`, x, h - 6);
+  }
 
   if (xVals.length === 1) {
     const x = padLeft + plotW / 2;
     const y = padTop + plotH / 2;
+    ctx.beginPath();
     ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
     return;
   }
 
+  // Area fill (gradient)
+  const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
+  gradient.addColorStop(0, color + "30");
+  gradient.addColorStop(1, color + "05");
+
+  ctx.beginPath();
+  for (let i = 0; i < xVals.length; i++) {
+    const x = padLeft + (i / (xVals.length - 1)) * plotW;
+    const y = padTop + plotH - ((yVals[i] - minY) / (maxY - minY || 1)) * plotH;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  // Close path for area fill
+  ctx.lineTo(padLeft + plotW, padTop + plotH);
+  ctx.lineTo(padLeft, padTop + plotH);
+  ctx.closePath();
+  ctx.fillStyle = gradient;
+  ctx.fill();
+
+  // Draw Line
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
   for (let i = 0; i < xVals.length; i++) {
     const x = padLeft + (i / (xVals.length - 1)) * plotW;
     const y = padTop + plotH - ((yVals[i] - minY) / (maxY - minY || 1)) * plotH;
@@ -433,13 +502,29 @@ function drawChart(
   }
   ctx.stroke();
 
-  // Draw Dots
-  ctx.fillStyle = color;
+  // Draw Dots with hover-style glow
   for (let i = 0; i < xVals.length; i++) {
     const x = padLeft + (i / (xVals.length - 1)) * plotW;
     const y = padTop + plotH - ((yVals[i] - minY) / (maxY - minY || 1)) * plotH;
+
+    // Outer glow
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = color + "22";
+    ctx.fill();
+
+    // Inner dot
     ctx.beginPath();
     ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
+
+    // White center for last point
+    if (i === xVals.length - 1) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fill();
+    }
   }
 }
