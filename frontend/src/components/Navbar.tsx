@@ -5,7 +5,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { IconBrain } from "./Icons";
 
-export const Navbar = () => {
+interface NavbarProps {
+  activeTab?: string;
+  onTabChange?: (tab: any) => void;
+  role?: string;
+}
+
+export const Navbar: React.FC<NavbarProps> = () => {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
