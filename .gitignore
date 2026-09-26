@@ -39,6 +39,9 @@ htmlcov/
 # Datasets (do not commit raw datasets)
 data/raw/
 data/processed/
+TRAIN/archive/
+TRAIN/archive.zip
+*.zip
 
 # Model checkpoints (do not commit trained model weights)
 models/global/*

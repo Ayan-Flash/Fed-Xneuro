@@ -1,0 +1,4 @@
+# Ignore dataset archive folders and large zip files
+archive/
+archive.zip
+*.zip
