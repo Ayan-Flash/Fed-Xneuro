@@ -21,16 +21,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const adminLinks = [
     { name: "Overview", href: "/dashboard/admin", icon: IconAdmin },
-    { name: "Hospitals", href: "#", icon: IconHospital },
-    { name: "Reports", href: "#", icon: IconReports },
-    { name: "Settings", href: "#", icon: IconSettings },
+    { name: "Hospitals", href: "/dashboard/admin/hospitals", icon: IconHospital },
+    { name: "Reports", href: "/dashboard/admin/reports", icon: IconReports },
+    { name: "Settings", href: "/dashboard/admin/settings", icon: IconSettings },
   ];
 
   const hospitalLinks = [
     { name: "Dashboard", href: "/dashboard/hospital", icon: IconHospital },
     { name: "New Assessment", href: "/dashboard/hospital/assessment", icon: IconBrain },
-    { name: "Patient History", href: "#", icon: IconHistory },
-    { name: "Settings", href: "#", icon: IconSettings },
+    { name: "Patient History", href: "/dashboard/hospital/patients", icon: IconHistory },
+    { name: "Settings", href: "/dashboard/hospital/settings", icon: IconSettings },
   ];
 
   const links = role === "admin" ? adminLinks : hospitalLinks;

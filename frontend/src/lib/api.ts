@@ -200,3 +200,113 @@ export async function getClinicianDashboard(simulationId: number): Promise<Clini
 export function getSimulationWebSocketUrl(idOrRunId: string | number): string {
   return `${WS_BASE}/${idOrRunId}`;
 }
+
+export interface ScanValidationResponse {
+  is_valid_brain_mri: boolean;
+  confidence: number;
+  modality: string;
+  reason: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  file_size_formatted: string;
+  sha256_checksum: string;
+  biomarkers?: {
+    hippocampal_volume_mm3: number;
+    ventricular_enlargement_ratio: number;
+    entorhinal_cortex_thickness_mm: number;
+    whole_brain_volume_cm3: number;
+    white_matter_hyperintensities_cm3: number;
+    estimated_dementia_stage: string;
+    brain_parenchymal_fraction?: number;
+    slice_plane?: string;
+  } | null;
+}
+
+export interface AssessmentPredictionRequest {
+  patient_id: string;
+  patient_name?: string;
+  age: number;
+  gender: string;
+  education_years?: number;
+  mmse: number;
+  cdr: number;
+  has_imaging: boolean;
+  document_metadata?: Record<string, any> | null;
+}
+
+export interface AssessmentPredictionResponse {
+  patient_id: string;
+  risk_level: "Low" | "Moderate" | "High";
+  progression_probability: number;
+  confidence: number;
+  has_multimodal_imaging: boolean;
+  factors: Array<{
+    name: string;
+    impact: number;
+    color: string;
+  }>;
+  recommendation: string;
+  timestamp: string;
+  mri_validation?: {
+    is_verified: boolean;
+    modality: string;
+    confidence: number;
+    biomarkers: Record<string, any>;
+  };
+}
+
+export async function validateScanFile(file: File): Promise<ScanValidationResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/assessments/validate-scan`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Scan validation failed with status ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function predictAssessment(
+  data: AssessmentPredictionRequest
+): Promise<AssessmentPredictionResponse> {
+  const res = await fetch(`${API_BASE}/assessments/predict`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Prediction failed with status ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function uploadAssessmentDocument(
+  file: File,
+  patientId: string = "PAT-NEW"
+): Promise<ScanValidationResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("patient_id", patientId);
+
+  const res = await fetch(`${API_BASE}/assessments/upload-document`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Document upload failed with status ${res.status}`);
+  }
+
+  return res.json();
+}
