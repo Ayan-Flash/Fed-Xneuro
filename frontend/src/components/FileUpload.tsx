@@ -33,6 +33,7 @@ interface FileUploadProps {
   sublabel?: string;
   icon?: "brain" | "document";
   requireBrainMri?: boolean;
+  darkMode?: boolean;
   onFilesChange?: (files: File[]) => void;
   onValidationChange?: (result: FileValidationResult) => void;
 }
@@ -131,6 +132,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   sublabel = "Encrypted locally before processing",
   icon = "brain",
   requireBrainMri = true,
+  darkMode = false,
   onFilesChange,
   onValidationChange,
 }) => {
@@ -476,26 +478,55 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-gray-500 transition-all cursor-pointer group ${
-          isDragging
-            ? "border-[var(--color-primary)] bg-[var(--color-light-teal)]/60 scale-[1.01]"
-            : "border-gray-200 hover:bg-gray-50/70 hover:border-[var(--color-primary)]/40"
+        className={`border-2 border-dashed rounded-2xl p-6 sm:p-7 flex flex-col items-center justify-center transition-all cursor-pointer group ${
+          darkMode
+            ? isDragging
+              ? "border-violet-400 bg-violet-950/40 scale-[1.01] text-gray-200 shadow-lg shadow-violet-900/20"
+              : "border-[#674fb8] hover:border-violet-400 bg-[#0c0919] hover:bg-[#110d24] text-gray-400 shadow-inner"
+            : isDragging
+              ? "border-[var(--color-primary)] bg-[var(--color-light-teal)]/60 scale-[1.01] text-gray-500"
+              : "border-gray-200 hover:bg-gray-50/70 hover:border-[var(--color-primary)]/40 text-gray-500"
         }`}
       >
-        <div
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-2 transition-transform ${
-            isDragging
-              ? "bg-[var(--color-primary)] text-white scale-110"
-              : "bg-[var(--color-light-teal)] text-[var(--color-primary)] group-hover:scale-105"
-          }`}
-        >
-          <IconComponent size={24} />
-        </div>
-        <span className="text-xs font-semibold text-gray-700 text-center">{label}</span>
-        <span className="text-[11px] text-gray-400 mt-0.5 text-center">{sublabel}</span>
-        <span className="text-[10px] text-gray-400 mt-1">
-          Max {maxFiles} files • {maxSizeMB}MB each • AI Brain MRI Verification Enabled
+        {darkMode ? (
+          <div className="w-12 h-12 flex items-center justify-center mb-2.5 transition-transform group-hover:scale-110">
+            <svg
+              className="w-10 h-10 text-violet-400"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#8b5cf6"
+              strokeWidth="2.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              <polyline points="7 9 12 4 17 9" />
+              <line x1="12" y1="4" x2="12" y2="16" />
+            </svg>
+          </div>
+        ) : (
+          <div
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-2 transition-transform ${
+              isDragging
+                ? "bg-[var(--color-primary)] text-white scale-110"
+                : "bg-[var(--color-light-teal)] text-[var(--color-primary)] group-hover:scale-105"
+            }`}
+          >
+            <IconComponent size={24} />
+          </div>
+        )}
+
+        <span className={`text-xs font-semibold text-center ${darkMode ? "text-[#b8b3d0] font-sans text-sm" : "text-gray-700"}`}>
+          {label}
         </span>
+        <span className={`text-[11px] mt-0.5 text-center ${darkMode ? "text-[#6b6589] font-mono text-xs mt-1" : "text-gray-400"}`}>
+          {sublabel}
+        </span>
+        {!darkMode && (
+          <span className="text-[10px] mt-1 text-gray-400">
+            Max {maxFiles} files • {maxSizeMB}MB each • AI Brain MRI Verification Enabled
+          </span>
+        )}
         <input
           ref={inputRef}
           type="file"
@@ -539,7 +570,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               <div
                 key={f.id}
                 className={`rounded-xl px-4 py-3 flex items-start gap-3 shadow-xs transition-all ${
-                  isRejected
+                  darkMode
+                    ? isRejected
+                      ? "bg-rose-950/40 border border-rose-700/60 text-rose-200"
+                      : isVerified
+                      ? "bg-[#15112c] border border-violet-500/40 shadow-md text-gray-200"
+                      : "bg-[#15112c] border border-gray-700/60 text-gray-200"
+                    : isRejected
                     ? "bg-rose-50/80 border border-rose-200"
                     : isVerified
                     ? "bg-white border border-emerald-200/90 shadow-sm"

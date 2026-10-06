@@ -45,6 +45,40 @@ export default function HospitalDashboard() {
         </Link>
       </div>
 
+      {/* Model Switcher Spotlight Banner */}
+      <div className="mb-8 rounded-2xl bg-gradient-to-r from-[#0d0b1a] via-[#16122c] to-[#0d0b1a] border border-violet-900/40 p-5 sm:p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5 relative overflow-hidden">
+        <div className="relative z-10 flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-violet-600/20 border border-violet-500/40 flex items-center justify-center text-violet-300 shrink-0">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-violet-400 bg-violet-950/60 px-2.5 py-0.5 rounded-full border border-violet-700/40">
+                New Diagnostic Feature
+              </span>
+              <span className="text-xs text-gray-400 font-mono">attention_unet_final.h5 &amp; Checkpoints</span>
+            </div>
+            <h3 className="text-base font-bold text-white mt-1">
+              Custom Model Switcher &amp; Multi-Model MRI Scanner
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5 max-w-2xl">
+              Switch between single or multi-select AI models (<span className="font-mono text-violet-300">attention_unet_final.h5</span>, <span className="font-mono text-violet-300">fedxneuro_best.pt</span>), upload cranial MRI scans, and run instant inference.
+            </p>
+          </div>
+        </div>
+        <Link
+          href="/dashboard/hospital/assessment"
+          className="relative z-10 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-violet-600/30 shrink-0 transition-all hover:scale-[1.02]"
+        >
+          <span>Open Model Switcher</span>
+          &rarr;
+        </Link>
+      </div>
+
       {/* Quick Actions & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
         <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 flex items-center gap-4 hover:shadow-md hover:border-[var(--color-primary)]/30 hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group">

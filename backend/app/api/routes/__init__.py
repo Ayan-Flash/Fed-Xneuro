@@ -14,6 +14,7 @@ from backend.app.api.routes.results import router as results_router
 from backend.app.api.routes.clients import router as clients_router
 from backend.app.api.routes.experiments import router as experiments_router
 from backend.app.api.routes.assessments import router as assessments_router
+from backend.app.api.routes.model_files import router as model_files_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
@@ -27,5 +28,6 @@ api_router.include_router(results_router)
 api_router.include_router(clients_router)
 api_router.include_router(experiments_router)
 api_router.include_router(assessments_router)
+api_router.include_router(model_files_router)
 
 __all__ = ["api_router"]

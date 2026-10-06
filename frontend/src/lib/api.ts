@@ -232,11 +232,16 @@ export interface AssessmentPredictionRequest {
   mmse: number;
   cdr: number;
   has_imaging: boolean;
+  model?: string;
   document_metadata?: Record<string, any> | null;
 }
 
 export interface AssessmentPredictionResponse {
   patient_id: string;
+  selected_model?: string;
+  model_name?: string;
+  model_badge?: string;
+  architecture_type?: string;
   risk_level: "Low" | "Moderate" | "High";
   progression_probability: number;
   confidence: number;
@@ -362,3 +367,28 @@ export async function checkBackendHealth(): Promise<{ status: string; service: s
   }
   return res.json();
 }
+
+// ─── Model File Discovery ───────────────────────────────────────────────────
+
+export interface ModelFileInfo {
+  id: string;
+  filename: string;
+  display_name: string;
+  filepath: string;
+  extension: string;
+  size_bytes: number;
+  size_display: string;
+  modified_at: string;
+  category: string;
+}
+
+export async function fetchModelFiles(): Promise<ModelFileInfo[]> {
+  const res = await fetch(`${API_BASE}/model-files`);
+  if (!res.ok) {
+    // Fallback with empty array if endpoint is unavailable
+    console.warn("Could not fetch model files from backend");
+    return [];
+  }
+  return res.json();
+}
+
