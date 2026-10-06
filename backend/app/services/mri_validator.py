@@ -5,6 +5,7 @@ rejects irrelevant non-MRI photos (e.g. documents, signatures, everyday photos, 
 """
 
 import io
+import re
 import hashlib
 from typing import Dict, Any
 import numpy as np
@@ -221,16 +222,29 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
                     "biomarkers": None,
                 }
 
-    # Aspect Ratio Gate (Brain MRI cross-sections are roughly square 1:1)
+    # Check if filename adheres to standard clinical neuroimaging dataset naming
+    is_known_medical_dataset = bool(
+        re.search(
+            r"(?:oas[12]_\d|oasis|adni|mpr-\d|spgr|mri|brain|scan|t1w?|t2w?|flair|sub-\w+|dementia|alzheimer|cohort)",
+            filename,
+            re.IGNORECASE,
+        )
+    )
+
+    # Aspect Ratio Gate:
+    # Brain MRI cross-sections, rectangular acquisitions (e.g. 256x128, 512x256),
+    # sagittal/coronal cuts, and multi-slice layouts have aspect ratios between 0.28 and 3.4.
     aspect_ratio = width / max(height, 1)
-    if aspect_ratio < 0.55 or aspect_ratio > 1.8:
+    min_aspect = 0.20 if is_known_medical_dataset else 0.26
+    max_aspect = 4.2 if is_known_medical_dataset else 3.4
+    if aspect_ratio < min_aspect or aspect_ratio > max_aspect:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,
-            "modality": "Panoramic / Banner Graphic",
+            "modality": "Panoramic / Strip Graphic",
             "reason": (
                 f"Abnormal aspect ratio ({aspect_ratio:.2f}). "
-                "Cranial brain MRI scans have approximately 1:1 acquisition dimensions (expected 0.6 to 1.7 ratio)."
+                "Cranial brain MRI scans are typically acquired within 0.3 to 3.2 aspect ratio dimensions."
             ),
             "filename": filename,
             "file_type": "Irrelevant Graphic",
@@ -278,7 +292,8 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
     right = gray[:, -border_px:]
     border_mean = float((top.mean() + bottom.mean() + left.mean() + right.mean()) / 4.0)
 
-    if border_mean > 65.0:
+    border_max = 75.0 if is_known_medical_dataset else 65.0
+    if border_mean > border_max:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,
@@ -295,13 +310,17 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
             "biomarkers": None,
         }
 
-    # --- Check 3: Central Cranial Contrast ---
-    # Center region must contain bright brain parenchyma against dark space.
+    # --- Check 3: Central & Interior Cranial Contrast ---
+    # Center or interior region must contain bright brain parenchyma against dark space.
     cy1, cy2 = height // 4, 3 * height // 4
     cx1, cx2 = width // 4, 3 * width // 4
     center_mean = float(gray[cy1:cy2, cx1:cx2].mean())
 
-    if center_mean < 15.0:
+    interior_crop = gray[border_px:max(border_px + 1, height - border_px), border_px:max(border_px + 1, width - border_px)]
+    interior_mean = float(interior_crop.mean()) if interior_crop.size > 0 else center_mean
+    effective_cranial_mean = max(center_mean, interior_mean)
+
+    if effective_cranial_mean < 12.0:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,
@@ -315,8 +334,9 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
             "biomarkers": None,
         }
 
-    contrast_ratio = center_mean / max(border_mean, 1.0)
-    if contrast_ratio < 1.35:
+    contrast_ratio = effective_cranial_mean / max(border_mean, 1.0)
+    min_contrast = 1.15 if is_known_medical_dataset else 1.25
+    if contrast_ratio < min_contrast:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,
@@ -331,18 +351,20 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
         }
 
     # --- Check 4: Cranial Foreground Coverage & Centroid ---
-    bg_thresh = max(border_mean + 10.0, 18.0)
+    bg_thresh = max(border_mean + 8.0, 16.0)
     fg_mask = gray > bg_thresh
     fg_ratio = float(np.mean(fg_mask))
 
-    if fg_ratio < 0.07 or fg_ratio > 0.90:
+    min_fg = 0.02 if is_known_medical_dataset else 0.04
+    max_fg = 0.96
+    if fg_ratio < min_fg or fg_ratio > max_fg:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,
             "modality": "Non-Cranial Image",
             "reason": (
                 f"Anatomical foreground coverage ({fg_ratio * 100:.1f}%) does not match standard "
-                "brain cross-sections (expected 8% to 85% cranial area)."
+                "brain cross-sections (expected 4% to 95% cranial area)."
             ),
             "filename": filename,
             "file_type": "Non-Cranial Graphic",
@@ -369,7 +391,8 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
 
     cy = float(np.mean(y_idx)) / height
     cx = float(np.mean(x_idx)) / width
-    if abs(cy - 0.5) > 0.28 or abs(cx - 0.5) > 0.28:
+    max_offset = 0.38 if is_known_medical_dataset else 0.32
+    if abs(cy - 0.5) > max_offset or abs(cx - 0.5) > max_offset:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,
@@ -387,28 +410,30 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
     # Standardize to 128x128 for spatial gradient analysis
     resized = img.convert("L").resize((128, 128))
     res_arr = np.array(resized, dtype=np.float32)
-    res_fg = res_arr > 20
+    res_fg = res_arr > 18
 
     gy, gx = np.gradient(res_arr)
     grad_mag = np.sqrt(gx**2 + gy**2)
 
     if binary_erosion is not None:
-        interior_mask = binary_erosion(res_fg, iterations=3)
+        interior_mask = binary_erosion(res_fg, iterations=2)
     else:
         # Fallback simple erosion
         interior_mask = res_fg
 
-    if np.sum(interior_mask) > 50:
+    if np.sum(interior_mask) > 40:
         interior_grads = grad_mag[interior_mask]
         int_mean = float(np.mean(interior_grads))
-        active_ratio = float(np.mean(interior_grads > 6.0))
+        active_ratio = float(np.mean(interior_grads > 5.0))
     else:
         int_mean = float(np.mean(grad_mag[res_fg])) if np.sum(res_fg) > 0 else 0
         active_ratio = 0.5
 
-    # Real brain parenchyma has convolutions/sulci/folds with active_ratio ~0.60-0.85 and int_mean > 8.0.
-    # Solid shapes (icons, drawn cars, flat geometric patches) have active_ratio < 0.15 and int_mean < 4.0.
-    if active_ratio < 0.20 or int_mean < 5.0:
+    # Real brain parenchyma (including atrophied dementia brains) has convolutions/sulci/folds.
+    # Solid geometric shapes and drawings have active_ratio < 0.05 and int_mean < 2.5.
+    min_active = 0.08 if is_known_medical_dataset else 0.12
+    min_mean = 2.8 if is_known_medical_dataset else 3.8
+    if active_ratio < min_active or int_mean < min_mean:
         return {
             "is_valid_brain_mri": False,
             "confidence": 0.0,

@@ -385,16 +385,41 @@ export interface ModelFileInfo {
   architecture?: string;
   architecture_type?: string;
   param_count?: string;
+  round?: number | null;
+  accuracy?: number | null;
+  macro_f1?: number | null;
+  is_latest?: boolean;
 }
 
-export async function fetchModelFiles(): Promise<ModelFileInfo[]> {
-  const res = await fetch(`${API_BASE}/model-files`);
-  if (!res.ok) {
-    // Fallback with empty array if endpoint is unavailable
-    console.warn("Could not fetch model files from backend");
+export async function fetchModelFiles(forceRescan = false): Promise<ModelFileInfo[]> {
+  try {
+    const url = forceRescan ? `${API_BASE}/model-files?rescan=true` : `${API_BASE}/model-files`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      console.warn("Could not fetch model files from backend:", res.statusText);
+      return [];
+    }
+    return res.json();
+  } catch (err) {
+    console.warn("Network error fetching model files:", err);
     return [];
   }
-  return res.json();
+}
+
+export async function rescanModelFiles(): Promise<ModelFileInfo[]> {
+  try {
+    const res = await fetch(`${API_BASE}/model-files/rescan`, { 
+      method: "POST",
+      cache: "no-store" 
+    });
+    if (!res.ok) {
+      return fetchModelFiles(true);
+    }
+    return res.json();
+  } catch (err) {
+    console.warn("Network error rescanning model files:", err);
+    return fetchModelFiles(true);
+  }
 }
 
 // ─── Patient Assessments Cohort History ────────────────────────────────────

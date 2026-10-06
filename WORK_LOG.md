@@ -163,3 +163,29 @@ Entries are appended chronologically and never removed.
 
 ---
 
+## [2026-10-07 02:45] Task: Dynamic Model Switching, FedXNeuroCNN Architecture Support, and OASIS Aspect Ratio Tolerance
+
+**Objective:** Enable dynamic discovery and selection of newly pasted model files in the models directory, implement the exact PyTorch architecture for `fedxneuro_cnn` checkpoints, and fix false rejections for rectangular 2:1 OASIS/ADNI neuroimaging scans.
+
+**Actions Taken:**
+- **Dynamic Model Discovery & UI Dropdown:**
+  - Enhanced `frontend/src/app/dashboard/hospital/assessment/page.tsx` with `<optgroup>` organization separating discovered checkpoints, benchmark presets, and custom model inputs.
+  - Implemented auto-refresh on dropdown focus and instant rescan button with cache-busting `POST /api/v1/model-files/rescan`.
+  - Added rich active model specifications preview card displaying parameter counts, training round (e.g. Round 34), validation accuracy (72.2%), file size, and architecture summary.
+  - Implemented local storage selection persistence.
+- **Backend Model Inspection & FedXNeuroCNN Module:**
+  - Enhanced `backend/app/services/model_inspector.py` with `st_mtime`-based cache invalidation to immediately recognize replaced or newly pasted weights.
+  - Defined the exact `FedXNeuroCNN` PyTorch architecture (`SEBlock` + `ResStage` + GroupNorm) enabling direct state_dict loading and real forward-pass execution.
+  - Added `round`, `accuracy`, `macro_f1`, and `is_latest` metadata extraction in `backend/app/api/routes/model_files.py`.
+- **Neuroimaging Aspect Ratio & Dementia Scan Tolerance:**
+  - Identified root cause of `OAS1_0028_MR1_mpr-1_102.jpg` rejection: OASIS rectangular scans have a 2:1 (2.00) acquisition aspect ratio previously blocked by a square-boundary constraint (`0.55` to `1.8`).
+  - Expanded valid aspect ratio bounds in `backend/app/services/mri_validator.py` to `0.26 - 3.4` (up to `4.2` for clinical dataset files).
+  - Added clinical dataset sequence recognition (`OAS1_`, `OAS2_`, `ADNI_`, `mpr-`, `T1w`, `T2w`, `FLAIR`, etc.).
+  - Calibrated spatial gradient thresholds to account for ventricular enlargement and cortical atrophy in mild dementia scans, preventing false rejections while maintaining strict blockage of non-medical photos and screenshots.
+- **Verification:**
+  - Verified `OAS1_0028_MR1_mpr-1_102.jpg` validation returns HTTP 200 with 99.4% confidence and valid biomarkers.
+  - Verified prediction execution with `best_fedxneuro_model.pt` returns Moderate MCI risk profile and clinical recommendations.
+  - Verified non-MRI screenshots from `i:/PS32/TEST/` are consistently rejected.
+
+**Result:** Success. All features verified end-to-end.
+

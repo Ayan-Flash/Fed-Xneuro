@@ -16,14 +16,110 @@ import {
   predictAssessment, 
   AssessmentPredictionResponse, 
   fetchModelFiles, 
+  rescanModelFiles,
   ModelFileInfo, 
   saveAssessmentRecord 
 } from "@/lib/api";
 
 type AssessmentState = "input" | "analyzing" | "result";
 
-const DEFAULT_MODELS = [
-  { id: "fedxneuro_best.pt", filename: "fedxneuro_best.pt", display_name: "Fed-XNeuro (fedxneuro_best.pt)", badge: "Federated Best (AUC 0.99)", size_display: "5.7 MB", architecture: "3D ResNet-18 + Multi-Modal Fusion + Missing Visit Attention Imputer + Temporal Transformer" },
+const DEFAULT_MODELS: ModelFileInfo[] = [
+  {
+    id: "best_fedxneuro_model",
+    filename: "best_fedxneuro_model.pt",
+    display_name: "Fed-XNeuro CNN (best_fedxneuro_model.pt)",
+    filepath: "best_fedxneuro_model.pt",
+    extension: ".pt",
+    size_bytes: 10055855,
+    size_display: "9.6 MB",
+    modified_at: "Oct 07, 2026",
+    category: "root",
+    badge: "Federated CNN (2.5M params • Round 34 • 72.2% Acc)",
+    architecture: "Fed-XNeuro Multi-Stage Cranial Convolutional Network with SE-Attention & GroupNorm (fedxneuro_cnn)",
+    architecture_type: "Federated Cranial Convolutional Network",
+    param_count: "2.5M params",
+    round: 34,
+    accuracy: 72.2,
+    macro_f1: 71.0,
+    is_latest: true,
+  },
+  {
+    id: "fedxneuro_best",
+    filename: "fedxneuro_best.pt",
+    display_name: "Fed-XNeuro (fedxneuro_best.pt)",
+    filepath: "fedxneuro_best.pt",
+    extension: ".pt",
+    size_bytes: 5977652,
+    size_display: "5.7 MB",
+    modified_at: "Oct 06, 2026",
+    category: "root",
+    badge: "Federated Best (AUC 0.99)",
+    architecture: "3D ResNet-18 + Multi-Modal Fusion + Missing Visit Attention Imputer + Temporal Transformer",
+    architecture_type: "Multimodal Longitudinal Deep Learning",
+    param_count: "1.5M params",
+    round: null,
+    accuracy: null,
+    macro_f1: null,
+    is_latest: false,
+  },
+  {
+    id: "_fedxneuro_model",
+    filename: "_fedxneuro_model.pt",
+    display_name: "Fed-XNeuro CNN (_fedxneuro_model.pt)",
+    filepath: "_fedxneuro_model.pt",
+    extension: ".pt",
+    size_bytes: 10054959,
+    size_display: "9.6 MB",
+    modified_at: "Oct 06, 2026",
+    category: "root",
+    badge: "Federated CNN (2.5M params • Round 1 • 25.0% Acc)",
+    architecture: "Fed-XNeuro Multi-Stage Cranial Convolutional Network with SE-Attention & GroupNorm (fedxneuro_cnn)",
+    architecture_type: "Federated Cranial Convolutional Network",
+    param_count: "2.5M params",
+    round: 1,
+    accuracy: 25.0,
+    macro_f1: 10.0,
+    is_latest: false,
+  },
+];
+
+const BENCHMARK_PRESETS = [
+  {
+    id: "resnet",
+    filename: "resnet",
+    display_name: "3D ResNet-18 Volumetric Specialist",
+    badge: "Volumetric Vision (AUC 0.96)",
+    size_display: "Preset",
+    architecture: "3D ResNet-18 Volumetric Cranial Feature Extractor",
+    architecture_type: "Cranial Convolutional Vision",
+  },
+  {
+    id: "attention_unet",
+    filename: "attention_unet",
+    display_name: "Attention U-Net Saliency & Segmentation",
+    badge: "Attention Gate (AUC 0.98)",
+    size_display: "Preset",
+    architecture: "Attention U-Net Cranial Segmentation & Lesion Masking",
+    architecture_type: "Attention Guided Deep Segmentation",
+  },
+  {
+    id: "ensemble",
+    filename: "ensemble",
+    display_name: "Multimodal Cognitive-Biomarker Ensemble",
+    badge: "Ensemble (AUC 0.97)",
+    size_display: "Preset",
+    architecture: "Stacked Ensemble (Longitudinal Cognitive + Biomarkers + Cranial MRI)",
+    architecture_type: "Multimodal Ensemble",
+  },
+  {
+    id: "clinical_baseline",
+    filename: "clinical_baseline",
+    display_name: "Clinical Consensus Diagnostic Baseline",
+    badge: "Clinical Rules",
+    size_display: "Preset",
+    architecture: "Deterministic DSM-5 / NIA-AA Expert Criteria Matrix",
+    architecture_type: "Clinical Decision Heuristic",
+  },
 ];
 
 export default function SimpleAssessmentPage() {
@@ -41,9 +137,12 @@ export default function SimpleAssessmentPage() {
   });
 
   // Model file discovery & selection
-  const [modelFiles, setModelFiles] = useState<ModelFileInfo[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>("fedxneuro_best.pt");
-  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelFiles, setModelFiles] = useState<ModelFileInfo[]>(DEFAULT_MODELS);
+  const [selectedModel, setSelectedModel] = useState<string>("best_fedxneuro_model.pt");
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [customModelInput, setCustomModelInput] = useState("");
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
 
   // Simplified Subject / Patient input
   const [subjectName, setSubjectName] = useState("");
@@ -52,13 +151,20 @@ export default function SimpleAssessmentPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Fetch models from backend (callable anytime for rescan)
-  const loadModels = async () => {
+  const loadModels = async (forceRescan = false) => {
     setModelsLoading(true);
     try {
-      const files = await fetchModelFiles();
+      const files = forceRescan ? await rescanModelFiles() : await fetchModelFiles();
       if (files && files.length > 0) {
         setModelFiles(files);
-        if (!files.some((f) => f.filename === selectedModel)) {
+        setScanMessage(`Discovered ${files.length} model checkpoint${files.length > 1 ? "s" : ""} in models/`);
+        setTimeout(() => setScanMessage(null), 3500);
+
+        // Retain saved choice if valid, or default to latest
+        const stored = typeof window !== "undefined" ? localStorage.getItem("fedx_selected_model") : null;
+        if (stored && (files.some((f) => f.filename === stored) || BENCHMARK_PRESETS.some((b) => b.id === stored))) {
+          setSelectedModel(stored);
+        } else if (!files.some((f) => f.filename === selectedModel) && !BENCHMARK_PRESETS.some((b) => b.id === selectedModel)) {
           setSelectedModel(files[0].filename);
         }
       }
@@ -70,6 +176,10 @@ export default function SimpleAssessmentPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("fedx_selected_model");
+      if (stored) setSelectedModel(stored);
+    }
     loadModels();
   }, []);
 
@@ -224,12 +334,43 @@ export default function SimpleAssessmentPage() {
     setImagePreviewUrl(null);
   };
 
-  // Model options for select dropdown
-  const modelOptions = modelFiles.length > 0 
-    ? modelFiles.map((m) => ({ id: m.filename, label: `${m.display_name} • ${m.badge || m.size_display}` }))
-    : DEFAULT_MODELS.map((m) => ({ id: m.filename, label: `${m.display_name} • ${m.badge || m.size_display}` }));
+  const handleModelSelect = (val: string) => {
+    if (val === "__custom__") {
+      setIsCustomModel(true);
+    } else {
+      setIsCustomModel(false);
+      setSelectedModel(val);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("fedx_selected_model", val);
+      }
+    }
+  };
 
-  const activeModelMeta = modelFiles.find((m) => m.filename === selectedModel || m.id === selectedModel) || DEFAULT_MODELS[0];
+  const handleCustomModelSubmit = () => {
+    const trimmed = customModelInput.trim();
+    if (trimmed) {
+      setSelectedModel(trimmed);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("fedx_selected_model", trimmed);
+      }
+      setIsCustomModel(false);
+    }
+  };
+
+  // Find active model meta across discovered models, defaults, and benchmark presets
+  const activeModelMeta = 
+    modelFiles.find((m) => m.filename === selectedModel || m.id === selectedModel) ||
+    DEFAULT_MODELS.find((m) => m.filename === selectedModel || m.id === selectedModel) ||
+    BENCHMARK_PRESETS.find((b) => b.id === selectedModel) ||
+    {
+      id: selectedModel,
+      filename: selectedModel,
+      display_name: selectedModel,
+      badge: "Custom Checkpoint",
+      size_display: "Custom",
+      architecture: "Custom Deep Neural Network Model Architecture",
+      architecture_type: "Neural Network",
+    };
 
   const currentRisk = apiResult?.risk_level || "Moderate";
   const progressionProb = apiResult?.progression_probability || 48.5;
@@ -313,12 +454,17 @@ export default function SimpleAssessmentPage() {
               {/* Model Selector Dropdown with Dynamic Rescan */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-700">
-                    Select AI Model
-                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-700">
+                      Select AI Model
+                    </label>
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--color-light-teal)] text-[var(--color-primary)]">
+                      {modelFiles.length} Found
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={loadModels}
+                    onClick={() => loadModels(true)}
                     disabled={modelsLoading}
                     className="text-[11px] text-[var(--color-primary)] hover:underline flex items-center gap-1 font-semibold cursor-pointer disabled:opacity-50"
                     title="Rescan models/ directory for newly placed model files"
@@ -336,21 +482,44 @@ export default function SimpleAssessmentPage() {
                         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                       />
                     </svg>
-                    <span>Rescan Folder</span>
+                    <span>{modelsLoading ? "Scanning..." : "Rescan Folder"}</span>
                   </button>
                 </div>
 
+                {/* Scan Feedback Banner */}
+                {scanMessage && (
+                  <div className="mb-2 px-2.5 py-1 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 text-[11px] flex items-center gap-1.5 animate-fade-in-up">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                    <span className="font-semibold">{scanMessage}</span>
+                  </div>
+                )}
+
                 <div className="relative">
                   <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
+                    value={isCustomModel ? "__custom__" : selectedModel}
+                    onChange={(e) => handleModelSelect(e.target.value)}
+                    onFocus={() => loadModels(false)}
                     className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white appearance-none pr-9 cursor-pointer"
                   >
-                    {modelOptions.map((opt) => (
-                      <option key={opt.id} value={opt.id}>
-                        {opt.label}
+                    <optgroup label={`⚡ Discovered Model Checkpoints (models/) — ${modelFiles.length} Available`}>
+                      {modelFiles.map((m) => (
+                        <option key={m.id || m.filename} value={m.filename}>
+                          {m.is_latest ? "✨ [LATEST] " : ""}{m.display_name} • {m.badge || m.size_display}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="🧠 Pretrained Architectural Benchmarks">
+                      {BENCHMARK_PRESETS.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.display_name} • {b.badge}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="⚙️ Custom / External Model">
+                      <option value="__custom__">
+                        ➕ Specify Custom Model Filename or Path...
                       </option>
-                    ))}
+                    </optgroup>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -359,19 +528,83 @@ export default function SimpleAssessmentPage() {
                   </div>
                 </div>
 
-                {/* Active Model Architectural Preview */}
-                <div className="mt-2.5 p-2.5 bg-gray-50/90 rounded-xl border border-gray-100 flex items-center justify-between text-[11px]">
-                  <div className="flex items-center gap-1.5 truncate mr-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                    <span className="font-medium text-gray-700 truncate">
-                      {activeModelMeta?.architecture || "Deep Neural Model Architecture"}
+                {/* Custom Model Input Row */}
+                {isCustomModel && (
+                  <div className="mt-2.5 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 animate-fade-in-up">
+                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wide">
+                      Target Model File in models/
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customModelInput}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        placeholder="e.g. my_checkpoint.pt or round_50.pth"
+                        className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCustomModelSubmit}
+                        className="px-3 py-1.5 text-xs font-bold text-white bg-[var(--color-primary)] rounded-lg hover:opacity-90 cursor-pointer"
+                      >
+                        Set Active
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomModel(false)}
+                        className="px-2 py-1.5 text-xs text-gray-600 hover:text-gray-900 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Model Architectural Preview & Status Card */}
+                <div className="mt-2.5 p-3 bg-gray-50/90 rounded-xl border border-gray-200/80 space-y-2 text-[11px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>
+                      <span className="font-bold text-gray-800 truncate font-mono text-[11px]">
+                        {activeModelMeta?.filename || selectedModel}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {(activeModelMeta as any)?.is_latest && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                          ✨ NEWEST
+                        </span>
+                      )}
+                      <span className="px-2 py-0.5 rounded-full font-bold bg-[var(--color-light-teal)] text-[var(--color-primary)] border border-[var(--color-primary)]/20 text-[10px]">
+                        {activeModelMeta?.badge || "Ready for Inference"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-gray-600 text-[11px] leading-tight font-medium">
+                    {activeModelMeta?.architecture || "Deep Neural Model Architecture"}
+                  </p>
+
+                  <div className="pt-1.5 border-t border-gray-200/60 flex flex-wrap items-center justify-between text-[10px] text-gray-500 gap-2">
+                    <div className="flex items-center gap-3">
+                      {(activeModelMeta as any)?.param_count && (
+                        <span><strong className="text-gray-700 font-semibold">Params:</strong> {(activeModelMeta as any).param_count}</span>
+                      )}
+                      {(activeModelMeta as any)?.round && (
+                        <span><strong className="text-gray-700 font-semibold">Round:</strong> {(activeModelMeta as any).round}</span>
+                      )}
+                      {(activeModelMeta as any)?.accuracy && (
+                        <span><strong className="text-gray-700 font-semibold">Acc:</strong> {(activeModelMeta as any).accuracy}%</span>
+                      )}
+                      {(activeModelMeta as any)?.size_display && (
+                        <span><strong className="text-gray-700 font-semibold">Size:</strong> {(activeModelMeta as any).size_display}</span>
+                      )}
+                    </div>
+                    <span className="text-emerald-700 font-bold flex items-center gap-1">
+                      <IconCheck className="w-3 h-3 text-emerald-600" />
+                      Active for Prediction
                     </span>
                   </div>
-                  {activeModelMeta?.badge && (
-                    <span className="shrink-0 px-2 py-0.5 rounded-full font-bold bg-[var(--color-light-teal)] text-[var(--color-primary)] border border-[var(--color-primary)]/20 text-[10px]">
-                      {activeModelMeta.badge}
-                    </span>
-                  )}
                 </div>
               </div>
 

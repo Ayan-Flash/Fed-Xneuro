@@ -79,6 +79,12 @@ _INSPECTED_CACHE: Dict[str, Dict[str, Any]] = {}
 _LOADED_NEURAL_MODELS: Dict[str, Any] = {}
 
 
+def clear_model_cache() -> None:
+    """Clears both inspected and loaded neural model caches for instant folder rescan."""
+    _INSPECTED_CACHE.clear()
+    _LOADED_NEURAL_MODELS.clear()
+
+
 def _format_size(size_bytes: int) -> str:
     """Formats bytes into human-readable size."""
     if size_bytes < 1024:
@@ -93,8 +99,9 @@ def _format_size(size_bytes: int) -> str:
 
 def _title_from_filename(filename: str) -> str:
     """Transforms a filename into a clean title."""
-    base = os.path.splitext(filename)[0]
-    return base.replace("_", " ").replace("-", " ").title()
+    base = os.path.splitext(filename)[0].strip().strip("_")
+    cleaned = base.replace("_", " ").replace("-", " ").strip()
+    return cleaned.title() if cleaned else os.path.splitext(filename)[0]
 
 
 def find_model_file(identifier: str) -> Optional[str]:
@@ -138,21 +145,98 @@ def find_model_file(identifier: str) -> Optional[str]:
     return None
 
 
+def _build_fedxneuro_cnn_class():
+    """Lazily defines and returns the FedXNeuroCNN PyTorch class."""
+    try:
+        import torch
+        import torch.nn as nn
+        import torch.nn.functional as F
+
+        class SEBlock(nn.Module):
+            def __init__(self, channels: int, reduction: int = 8):
+                super().__init__()
+                red = max(8, channels // reduction)
+                self.fc1 = nn.Linear(channels, red, bias=False)
+                self.fc2 = nn.Linear(red, channels, bias=False)
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                b, c, _, _ = x.size()
+                y = F.adaptive_avg_pool2d(x, 1).view(b, c)
+                y = F.relu(self.fc1(y))
+                y = torch.sigmoid(self.fc2(y)).view(b, c, 1, 1)
+                return x * y
+
+        class ResStage(nn.Module):
+            def __init__(self, in_c: int, out_c: int, se_reduction: int = 8):
+                super().__init__()
+                self.conv1 = nn.Conv2d(in_c, out_c, kernel_size=3, padding=1, bias=False)
+                self.gn1 = nn.GroupNorm(num_groups=min(8, out_c), num_channels=out_c)
+                self.conv2 = nn.Conv2d(out_c, out_c, kernel_size=3, padding=1, bias=False)
+                self.gn2 = nn.GroupNorm(num_groups=min(8, out_c), num_channels=out_c)
+                self.se = SEBlock(out_c, reduction=se_reduction)
+                self.shortcut = nn.Sequential(
+                    nn.Conv2d(in_c, out_c, kernel_size=1, bias=False),
+                    nn.GroupNorm(num_groups=min(8, out_c), num_channels=out_c),
+                )
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                res = self.shortcut(x)
+                out = F.relu(self.gn1(self.conv1(x)))
+                out = self.gn2(self.conv2(out))
+                out = self.se(out)
+                return F.relu(out + res)
+
+        class FedXNeuroCNN(nn.Module):
+            def __init__(self, num_classes: int = 4):
+                super().__init__()
+                self.stem = nn.Sequential(
+                    nn.Conv2d(3, 32, kernel_size=5, stride=1, padding=2, bias=False),
+                    nn.GroupNorm(num_groups=4, num_channels=32),
+                    nn.ReLU(),
+                    nn.MaxPool2d(2),
+                )
+                self.stage1 = ResStage(32, 64, se_reduction=8)
+                self.stage2 = ResStage(64, 128, se_reduction=16)
+                self.stage3 = ResStage(128, 256, se_reduction=16)
+                self.stage4 = ResStage(256, 256, se_reduction=16)
+                self.classifier = nn.Sequential(
+                    nn.Linear(256, 128),
+                    nn.ReLU(),
+                    nn.Dropout(0.3),
+                    nn.Linear(128, num_classes),
+                )
+
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                x = self.stem(x)
+                x = self.stage1(x)
+                x = self.stage2(x)
+                x = self.stage3(x)
+                x = self.stage4(x)
+                x = F.adaptive_avg_pool2d(x, (1, 1)).flatten(1)
+                return self.classifier(x)
+
+        return FedXNeuroCNN
+    except Exception:
+        return None
+
+
 def inspect_model_file(file_path: str) -> Dict[str, Any]:
     """
     Deep-inspects a model file on disk to determine its parameter count,
     layer architecture family, performance metric badges, and metadata.
+    Automatically invalidates cache if file modification timestamp has changed.
     """
     abs_path = os.path.abspath(file_path)
-    if abs_path in _INSPECTED_CACHE:
-        return _INSPECTED_CACHE[abs_path]
-
     if not os.path.isfile(abs_path):
         raise FileNotFoundError(f"Model file not found at: {abs_path}")
 
+    stat = os.stat(abs_path)
+    cached = _INSPECTED_CACHE.get(abs_path)
+    if cached and cached.get("_mtime") == stat.st_mtime:
+        return cached
+
     filename = os.path.basename(abs_path)
     ext = os.path.splitext(filename)[1].lower()
-    stat = os.stat(abs_path)
     size_bytes = stat.st_size
     size_display = _format_size(size_bytes)
     modified_at = datetime.fromtimestamp(stat.st_mtime).strftime("%b %d, %Y %I:%M %p")
@@ -168,6 +252,12 @@ def inspect_model_file(file_path: str) -> Dict[str, Any]:
     family = "custom"
     param_count_str = None
     auc_score = None
+    round_val = None
+    accuracy_val = None
+    macro_f1 = None
+    loss_val = None
+    per_class_acc = None
+    cfg = {}
 
     if ext in (".pt", ".pth", ".bin"):
         try:
@@ -175,7 +265,6 @@ def inspect_model_file(file_path: str) -> Dict[str, Any]:
             ckpt = torch.load(abs_path, map_location="cpu", weights_only=False)
 
             state_dict = {}
-            cfg = {}
             if isinstance(ckpt, dict):
                 state_dict = (
                     ckpt.get("model_state_dict")
@@ -186,12 +275,13 @@ def inspect_model_file(file_path: str) -> Dict[str, Any]:
                 )
                 cfg = ckpt.get("config") if isinstance(ckpt.get("config"), dict) else {}
                 auc_score = ckpt.get("best_auc") or ckpt.get("auc") or ckpt.get("val_auc")
+                round_val = ckpt.get("round") or ckpt.get("epoch")
                 accuracy_val = ckpt.get("accuracy")
+                macro_f1 = ckpt.get("macro_f1")
+                loss_val = ckpt.get("loss")
+                per_class_acc = ckpt.get("per_class_accuracy")
             elif hasattr(ckpt, "state_dict"):
                 state_dict = ckpt.state_dict()
-                accuracy_val = None
-            else:
-                accuracy_val = None
 
             if isinstance(state_dict, dict) and state_dict:
                 total_params = sum(
@@ -213,29 +303,50 @@ def inspect_model_file(file_path: str) -> Dict[str, Any]:
             if model_cfg_name == "fedxneuro_cnn" or ("stem" in keys_joined and "stage1" in keys_joined):
                 family = "fedxneuro"
                 display_name = f"Fed-XNeuro CNN ({filename})"
-                round_str = f" - Round {ckpt.get('round')}" if isinstance(ckpt, dict) and ckpt.get("round") else ""
-                badge = f"Federated CNN ({param_count_str or size_display}{round_str})"
-                architecture = "Fed-XNeuro Multi-Stage Cranial Convolutional Network (fedxneuro_cnn)"
+                parts = []
+                if param_count_str:
+                    parts.append(param_count_str)
+                if round_val is not None:
+                    parts.append(f"Round {round_val}")
+                if accuracy_val is not None:
+                    acc_pct = accuracy_val * 100 if accuracy_val <= 1.0 else accuracy_val
+                    parts.append(f"{acc_pct:.1f}% Acc")
+                elif not parts:
+                    parts.append(size_display)
+                badge = f"Federated CNN ({' • '.join(parts)})"
+                architecture = "Fed-XNeuro Multi-Stage Cranial Convolutional Network with SE-Attention & GroupNorm (fedxneuro_cnn)"
                 arch_type = "Federated Cranial Convolutional Network"
 
             elif "mri_encoder" in keys_joined or "imputation" in keys_joined or "fedxneuro" in fname_lower:
                 family = "fedxneuro"
                 display_name = f"Fed-XNeuro ({filename})"
-                badge = f"Federated Best (AUC {auc_score:.2f})" if auc_score else (f"Federated Best ({param_count_str})" if param_count_str else f"Federated Best ({size_display})")
+                badge = (
+                    f"Federated Best (AUC {auc_score:.2f})"
+                    if auc_score
+                    else (f"Federated Best ({param_count_str})" if param_count_str else f"Federated Best ({size_display})")
+                )
                 architecture = "3D ResNet-18 + Multi-Modal Fusion + Missing Visit Attention Imputer + Temporal Transformer"
                 arch_type = "Multimodal Longitudinal Deep Learning"
 
             elif "unet" in keys_joined or "up_concat" in keys_joined or "unet" in fname_lower:
                 family = "attention_unet"
                 display_name = f"Attention U-Net ({filename})"
-                badge = f"Attention Gate (AUC {auc_score:.2f})" if auc_score else f"Attention Gate ({param_count_str or size_display})"
+                badge = (
+                    f"Attention Gate (AUC {auc_score:.2f})"
+                    if auc_score
+                    else f"Attention Gate ({param_count_str or size_display})"
+                )
                 architecture = "Attention U-Net Cranial Segmentation & Lesion Masking"
                 arch_type = "Attention Guided Deep Segmentation"
 
             elif "conv3d" in keys_joined or "layer1" in keys_joined or "resnet" in fname_lower:
                 family = "resnet"
                 display_name = f"3D ResNet Volumetric Specialist ({filename})"
-                badge = f"Volumetric Vision (AUC {auc_score:.2f})" if auc_score else f"Volumetric Vision ({param_count_str or size_display})"
+                badge = (
+                    f"Volumetric Vision (AUC {auc_score:.2f})"
+                    if auc_score
+                    else f"Volumetric Vision ({param_count_str or size_display})"
+                )
                 architecture = "3D ResNet-18 Volumetric Cranial Feature Extractor"
                 arch_type = "Cranial Convolutional Vision"
 
@@ -246,7 +357,7 @@ def inspect_model_file(file_path: str) -> Dict[str, Any]:
                 architecture = f"Custom PyTorch Neural Architecture ({param_count_str or size_display})"
                 arch_type = "Deep Neural Network"
 
-        except Exception as e:
+        except Exception:
             family = "custom_torch"
             badge = f"PyTorch Checkpoint ({size_display})"
 
@@ -295,7 +406,13 @@ def inspect_model_file(file_path: str) -> Dict[str, Any]:
         "modified_at": modified_at,
         "param_count": param_count_str,
         "auc_score": auc_score,
+        "round": round_val,
+        "accuracy": round(accuracy_val * 100, 1) if (accuracy_val is not None and accuracy_val <= 1.0) else (round(accuracy_val, 1) if accuracy_val is not None else None),
+        "macro_f1": round(macro_f1 * 100, 1) if (macro_f1 is not None and macro_f1 <= 1.0) else (round(macro_f1, 1) if macro_f1 is not None else None),
+        "loss": round(loss_val, 4) if loss_val is not None else None,
+        "per_class_accuracy": per_class_acc,
         "is_file": True,
+        "_mtime": stat.st_mtime,
     }
 
     _INSPECTED_CACHE[abs_path] = meta
@@ -344,23 +461,52 @@ def get_model_metadata(model_identifier: str) -> Dict[str, Any]:
 def get_loaded_pytorch_model(file_path: str) -> Optional[Any]:
     """
     Lazily instantiates and caches a PyTorch neural network model from a file path.
+    Supports FedXNeuroCNN, FedXNeuroModel, and general PyTorch checkpoint architectures.
     """
     abs_path = os.path.abspath(file_path)
-    if abs_path in _LOADED_NEURAL_MODELS:
-        return _LOADED_NEURAL_MODELS[abs_path]
+    stat = os.stat(abs_path) if os.path.exists(abs_path) else None
+    cached = _LOADED_NEURAL_MODELS.get(abs_path)
+    if cached is not None and stat and getattr(cached, "_mtime", None) == stat.st_mtime:
+        return cached
 
     try:
         import torch
-        from TRAIN.evaluate_kaggle_model import FedXNeuroModel
         if os.path.exists(abs_path):
             ckpt = torch.load(abs_path, map_location="cpu", weights_only=False)
             cfg = ckpt.get("config", {}) if isinstance(ckpt, dict) else {}
-            state_dict = ckpt.get("model_state_dict") if isinstance(ckpt, dict) else ckpt
-            m = FedXNeuroModel(cfg)
-            m.load_state_dict(state_dict)
-            m.eval()
-            _LOADED_NEURAL_MODELS[abs_path] = m
-            return m
+            state_dict = (
+                ckpt.get("model_state")
+                or ckpt.get("model_state_dict")
+                or ckpt.get("state_dict")
+                or (ckpt if isinstance(ckpt, dict) else None)
+            )
+            model_name = str(cfg.get("model", "")).lower()
+
+            if model_name == "fedxneuro_cnn" or (isinstance(state_dict, dict) and "stage1.conv1.weight" in state_dict):
+                cnn_cls = _build_fedxneuro_cnn_class()
+                if cnn_cls is not None:
+                    num_classes = 4
+                    if "classifier.3.weight" in state_dict:
+                        num_classes = state_dict["classifier.3.weight"].shape[0]
+                    m = cnn_cls(num_classes=num_classes)
+                    m.load_state_dict(state_dict, strict=True)
+                    m.eval()
+                    m._mtime = stat.st_mtime if stat else 0
+                    _LOADED_NEURAL_MODELS[abs_path] = m
+                    return m
+
+            # Attempt FedXNeuroModel
+            try:
+                from TRAIN.evaluate_kaggle_model import FedXNeuroModel
+                m = FedXNeuroModel(cfg)
+                if state_dict:
+                    m.load_state_dict(state_dict, strict=False)
+                m.eval()
+                m._mtime = stat.st_mtime if stat else 0
+                _LOADED_NEURAL_MODELS[abs_path] = m
+                return m
+            except Exception:
+                pass
     except Exception:
         pass
 
