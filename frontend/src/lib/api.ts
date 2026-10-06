@@ -242,6 +242,7 @@ export interface AssessmentPredictionResponse {
   model_name?: string;
   model_badge?: string;
   architecture_type?: string;
+  model_source_file?: string;
   risk_level: "Low" | "Moderate" | "High";
   progression_probability: number;
   confidence: number;
@@ -380,6 +381,10 @@ export interface ModelFileInfo {
   size_display: string;
   modified_at: string;
   category: string;
+  badge?: string;
+  architecture?: string;
+  architecture_type?: string;
+  param_count?: string;
 }
 
 export async function fetchModelFiles(): Promise<ModelFileInfo[]> {
@@ -391,4 +396,55 @@ export async function fetchModelFiles(): Promise<ModelFileInfo[]> {
   }
   return res.json();
 }
+
+// ─── Patient Assessments Cohort History ────────────────────────────────────
+
+export interface SavedAssessmentRecord {
+  id: string;
+  name: string;
+  age: number;
+  gender: string;
+  education_years?: number;
+  mmse: number;
+  cdr: number | string;
+  risk: "Low" | "Moderate" | "High";
+  progression_probability: number;
+  confidence: number;
+  has_imaging: boolean;
+  document_name?: string | null;
+  date: string;
+  primary_factor?: string;
+}
+
+export async function fetchAssessmentHistory(params?: {
+  risk?: string;
+  search?: string;
+}): Promise<{ total: number; records: SavedAssessmentRecord[] }> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.risk && params.risk !== "All") query.append("risk", params.risk);
+    if (params?.search) query.append("search", params.search);
+    const qStr = query.toString() ? `?${query.toString()}` : "";
+    const res = await fetch(`${API_BASE}/assessments/history${qStr}`, { cache: "no-store" });
+    if (!res.ok) {
+      return { total: 0, records: [] };
+    }
+    return res.json();
+  } catch {
+    return { total: 0, records: [] };
+  }
+}
+
+export async function saveAssessmentRecord(record: Partial<SavedAssessmentRecord>): Promise<any> {
+  const res = await fetch(`${API_BASE}/assessments/save`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(record),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to save assessment (${res.status})`);
+  }
+  return res.json();
+}
+
 

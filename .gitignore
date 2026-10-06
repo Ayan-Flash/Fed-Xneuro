@@ -66,3 +66,9 @@ results/plots/*
 *.swo
 .DS_Store
 Thumbs.db
+
+# Environment & Local Databases
+.env
+*.db-shm
+*.db-wal
+backend/*.db

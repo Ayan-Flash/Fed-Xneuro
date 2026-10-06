@@ -6,7 +6,7 @@ rejects irrelevant non-MRI photos (e.g. documents, signatures, everyday photos, 
 
 import io
 import hashlib
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import numpy as np
 from PIL import Image
 
@@ -29,7 +29,6 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
     """
     file_size = len(content)
     lower_name = (filename or "").lower()
-    ext = lower_name.split(".")[-1] if "." in lower_name else ""
     sha256_hash = hashlib.sha256(content).hexdigest()
 
     file_size_formatted = (
@@ -37,6 +36,27 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
         if file_size >= 1024 * 1024
         else f"{file_size / 1024:.1f} KB"
     )
+
+    # -------------------------------------------------------------
+    # 0. Check for Screen Captures / Screenshots / Non-Medical Captures
+    # -------------------------------------------------------------
+    screenshot_terms = ["screenshot", "screen shot", "screen_shot", "capture", "snip", "desktop", "wallpaper"]
+    if any(term in lower_name for term in screenshot_terms):
+        return {
+            "is_valid_brain_mri": False,
+            "confidence": 0.0,
+            "modality": "Screen Capture / Screenshot",
+            "reason": (
+                f"Non-medical capture detected: Screenshot files ('{filename}') cannot be evaluated. "
+                "AI clinical assessment requires a verified cranial Brain MRI scan (DICOM, NIfTI, or MRI slice)."
+            ),
+            "filename": filename,
+            "file_type": "Screen Capture",
+            "file_size": file_size,
+            "file_size_formatted": file_size_formatted,
+            "sha256_checksum": sha256_hash,
+            "biomarkers": None,
+        }
 
     # -------------------------------------------------------------
     # 1. 3D / Volumetric Medical Scan Validation (DICOM, NIfTI, NRRD)
@@ -48,9 +68,14 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
             # Standard DICOM preamble: 128 bytes + 'DICM'
             if file_size > 132 and content[128:132] == b"DICM":
                 is_dicom = True
-            elif b"DICM" in content[:256] or file_size > 4096:
-                # Some DICOM files omit preamble
+            elif b"DICM" in content[:512]:
                 is_dicom = True
+            elif file_size > 512:
+                # Non-preamble DICOM check: verify standard DICOM tag headers and VR signatures
+                has_dicom_tags = any(tag in content[:128] for tag in [b"\x02\x00", b"\x08\x00"])
+                has_dicom_vr = any(vr in content[:256] for vr in [b"UI", b"CS", b"SH", b"LO", b"OB", b"OW"])
+                if has_dicom_tags and has_dicom_vr:
+                    is_dicom = True
 
             if is_dicom:
                 return {
@@ -136,7 +161,7 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
     # 2. 2D Photo / Image Brain MRI Validation (PNG, JPG, JPEG, WEBP)
     # -------------------------------------------------------------
     try:
-        img = Image.open(io.BytesIO(content)).convert("RGB")
+        raw_img = Image.open(io.BytesIO(content))
     except Exception as e:
         return {
             "is_valid_brain_mri": False,
@@ -151,7 +176,7 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
             "biomarkers": None,
         }
 
-    width, height = img.size
+    width, height = raw_img.size
     if width < 48 or height < 48:
         return {
             "is_valid_brain_mri": False,
@@ -165,6 +190,57 @@ def validate_and_analyze_scan(content: bytes, filename: str) -> Dict[str, Any]:
             "sha256_checksum": sha256_hash,
             "biomarkers": None,
         }
+
+    # Check for transparent graphics (alpha channel margins)
+    if raw_img.mode in ("RGBA", "LA") or "transparency" in raw_img.info:
+        rgba_arr = np.array(raw_img)
+        if rgba_arr.ndim == 3 and rgba_arr.shape[2] == 4:
+            alpha = rgba_arr[:, :, 3]
+            border_px = max(2, min(width, height) // 12)
+            border_alpha = np.concatenate([
+                alpha[:border_px, :].ravel(),
+                alpha[-border_px:, :].ravel(),
+                alpha[:, :border_px].ravel(),
+                alpha[:, -border_px:].ravel(),
+            ])
+            if float(np.mean(border_alpha < 128)) > 0.35:
+                return {
+                    "is_valid_brain_mri": False,
+                    "confidence": 0.0,
+                    "modality": "Transparent Graphic / Icon",
+                    "reason": (
+                        "Irrelevant graphic detected: Transparent background margins identified. "
+                        "Cranial Brain MRI scans are physical radiologic acquisitions with zero-intensity "
+                        "scanner bore margins, not transparent alpha channels."
+                    ),
+                    "filename": filename,
+                    "file_type": "Transparent Graphic",
+                    "file_size": file_size,
+                    "file_size_formatted": file_size_formatted,
+                    "sha256_checksum": sha256_hash,
+                    "biomarkers": None,
+                }
+
+    # Aspect Ratio Gate (Brain MRI cross-sections are roughly square 1:1)
+    aspect_ratio = width / max(height, 1)
+    if aspect_ratio < 0.55 or aspect_ratio > 1.8:
+        return {
+            "is_valid_brain_mri": False,
+            "confidence": 0.0,
+            "modality": "Panoramic / Banner Graphic",
+            "reason": (
+                f"Abnormal aspect ratio ({aspect_ratio:.2f}). "
+                "Cranial brain MRI scans have approximately 1:1 acquisition dimensions (expected 0.6 to 1.7 ratio)."
+            ),
+            "filename": filename,
+            "file_type": "Irrelevant Graphic",
+            "file_size": file_size,
+            "file_size_formatted": file_size_formatted,
+            "sha256_checksum": sha256_hash,
+            "biomarkers": None,
+        }
+
+    img = raw_img.convert("RGB")
 
     arr = np.array(img, dtype=np.float32)
     r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]

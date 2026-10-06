@@ -19,6 +19,7 @@ export interface UploadedFile {
 
 export interface FileValidationResult {
   isValid: boolean;
+  isValidating: boolean;
   hasInvalidFiles: boolean;
   validFiles: File[];
   invalidFiles: Array<{ file: File; reason: string }>;
@@ -90,23 +91,39 @@ async function preCheckImageIsBrainMri(file: File): Promise<{ isValid: boolean; 
           }
         }
 
-        const avgColorDiff = colorDiffSum / (size * size);
-        const avgBorderBrightness = totalBorderBrightness / borderCount;
-
-        // 1. Color check
-        if (avgColorDiff > 24) {
+        // 0. Filename heuristic check for common non-medical captures
+        const lowerName = file.name.toLowerCase();
+        if (
+          lowerName.includes("screenshot") ||
+          lowerName.includes("screen shot") ||
+          lowerName.includes("screen_shot") ||
+          lowerName.includes("capture") ||
+          lowerName.includes("snippet")
+        ) {
           resolve({
             isValid: false,
-            reason: "Color photo detected. Brain MRI scans are grayscale medical acquisitions.",
+            reason: "Non-medical capture detected: Screenshot files cannot be evaluated. AI clinical assessment requires a verified cranial Brain MRI scan (DICOM, NIfTI, or MRI slice).",
           });
           return;
         }
 
-        // 2. Bright background check (e.g. document / signature on paper like signnnn.jpg)
-        if (avgBorderBrightness > 80) {
+        const avgColorDiff = colorDiffSum / (size * size);
+        const avgBorderBrightness = totalBorderBrightness / borderCount;
+
+        // 1. Color check (true brain MRIs have nearly zero color variation)
+        if (avgColorDiff > 12) {
           resolve({
             isValid: false,
-            reason: "Bright background detected. Brain MRI scans are enclosed by dark scanner bore margins (black air background).",
+            reason: "Color photo detected: Brain MRI scans are monochrome physical radio-frequency intensity acquisitions.",
+          });
+          return;
+        }
+
+        // 2. Bright background check (e.g. document / signature on paper / bright screenshot)
+        if (avgBorderBrightness > 50) {
+          resolve({
+            isValid: false,
+            reason: "Bright background detected: Brain MRI scans are enclosed by dark scanner bore margins (black air space).",
           });
           return;
         }
@@ -152,53 +169,62 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     };
   }, [files]);
 
-  // Synchronize validation changes to parent component
-  const notifyValidation = useCallback(
-    (currentFiles: UploadedFile[]) => {
-      if (!onValidationChange) return;
+  // Synchronize files and validation changes to parent component via useEffect.
+  // This guarantees updates only execute after render commit phase, preventing React "Cannot update during render" warnings.
+  useEffect(() => {
+    onFilesChange?.(files.map((f) => f.file));
 
-      const validFiles: File[] = [];
-      const invalidFiles: Array<{ file: File; reason: string }> = [];
-      let primaryMetadata: ScanValidationResponse | null = null;
+    if (!onValidationChange) return;
 
-      for (const f of currentFiles) {
-        if (f.isValidBrainMri === false || f.status === "error") {
-          invalidFiles.push({
-            file: f.file,
-            reason: f.validationReason || "Not a valid Brain MRI scan",
-          });
-        } else if (f.isValidBrainMri === true || f.status === "complete") {
-          validFiles.push(f.file);
-          if (!primaryMetadata && f.biomarkers) {
-            primaryMetadata = {
-              is_valid_brain_mri: true,
-              confidence: f.confidence || 98.4,
-              modality: f.modality || "Brain MRI Scan",
-              reason: f.validationReason || "Valid cranial brain MRI scan identified.",
-              filename: f.file.name,
-              file_type: f.modality || "Brain MRI Scan",
-              file_size: f.file.size,
-              file_size_formatted: `${(f.file.size / 1024).toFixed(1)} KB`,
-              sha256_checksum: "",
-              biomarkers: f.biomarkers,
-            };
-          }
+    const validFiles: File[] = [];
+    const invalidFiles: Array<{ file: File; reason: string }> = [];
+    let primaryMetadata: ScanValidationResponse | null = null;
+    let isValidating = false;
+
+    for (const f of files) {
+      if (f.status === "uploading" || f.status === "validating") {
+        isValidating = true;
+      } else if (f.isValidBrainMri === false || f.status === "error") {
+        invalidFiles.push({
+          file: f.file,
+          reason: f.validationReason || "Not a valid Brain MRI scan",
+        });
+      } else if (f.isValidBrainMri === true || f.status === "complete") {
+        validFiles.push(f.file);
+        if (!primaryMetadata && f.biomarkers) {
+          primaryMetadata = {
+            is_valid_brain_mri: true,
+            confidence: f.confidence || 98.4,
+            modality: f.modality || "Brain MRI Scan",
+            reason: f.validationReason || "Valid cranial brain MRI scan identified.",
+            filename: f.file.name,
+            file_type: f.modality || "Brain MRI Scan",
+            file_size: f.file.size,
+            file_size_formatted: `${(f.file.size / 1024).toFixed(1)} KB`,
+            sha256_checksum: "",
+            biomarkers: f.biomarkers,
+          };
         }
       }
+    }
 
-      const hasInvalidFiles = invalidFiles.length > 0;
-      const isValid = currentFiles.length > 0 && !hasInvalidFiles;
+    const hasInvalidFiles = invalidFiles.length > 0;
+    // CRITICAL: A file is valid ONLY if there are valid files, NO invalid files, NO ongoing validation, and all files were checked
+    const isValid =
+      files.length > 0 &&
+      !isValidating &&
+      !hasInvalidFiles &&
+      validFiles.length === files.length;
 
-      onValidationChange({
-        isValid,
-        hasInvalidFiles,
-        validFiles,
-        invalidFiles,
-        primaryMetadata,
-      });
-    },
-    [onValidationChange]
-  );
+    onValidationChange({
+      isValid,
+      isValidating,
+      hasInvalidFiles,
+      validFiles,
+      invalidFiles,
+      primaryMetadata,
+    });
+  }, [files, onFilesChange, onValidationChange]);
 
   // Validate a single file using client pre-check and backend API
   const validateFileWithAi = useCallback(
@@ -217,8 +243,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       // Fast Client Pre-check
       const precheck = await preCheckImageIsBrainMri(targetFile.file);
       if (!precheck.isValid) {
-        setFiles((prev) => {
-          const updated = prev.map((f) =>
+        setFiles((prev) =>
+          prev.map((f) =>
             f.id === targetFile.id
               ? {
                   ...f,
@@ -228,10 +254,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                   validationReason: precheck.reason,
                 }
               : f
-          );
-          notifyValidation(updated);
-          return updated;
-        });
+          )
+        );
         return;
       }
 
@@ -247,8 +271,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       try {
         const result = await validateScanFile(targetFile.file);
 
-        setFiles((prev) => {
-          const updated = prev.map((f) => {
+        setFiles((prev) =>
+          prev.map((f) => {
             if (f.id !== targetFile.id) return f;
             if (result.is_valid_brain_mri) {
               return {
@@ -271,33 +295,27 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 modality: result.modality,
               };
             }
-          });
-          notifyValidation(updated);
-          return updated;
-        });
+          })
+        );
       } catch (err: any) {
-        // In case backend is temporarily unreachable, fallback to client heuristic
-        console.warn("Backend validation fallback:", err);
-        setFiles((prev) => {
-          const updated = prev.map((f) =>
+        console.warn("Backend validation note:", err?.message);
+        setFiles((prev) =>
+          prev.map((f) =>
             f.id === targetFile.id
               ? {
                   ...f,
                   progress: 100,
-                  status: "complete" as const,
-                  isValidBrainMri: true,
-                  confidence: 91.5,
-                  validationReason: "Brain MRI Scan verified locally (Enclave-Secured)",
-                  modality: "Brain MRI Scan (Local Enclave)",
+                  status: "error" as const,
+                  isValidBrainMri: false,
+                  validationReason: err?.message || "AI Verification Error: Unable to verify this file as a genuine Brain MRI scan.",
+                  modality: "Unverified File",
                 }
               : f
-          );
-          notifyValidation(updated);
-          return updated;
-        });
+          )
+        );
       }
     },
-    [requireBrainMri, notifyValidation]
+    [requireBrainMri]
   );
 
   const isFileAccepted = useCallback(
@@ -337,6 +355,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       }
 
       for (const file of arr) {
+        // Edge Case: Dropping an OS folder instead of a file
+        if (file.size === 0 && !file.type && !file.name.includes(".")) {
+          setError("Folders cannot be uploaded directly. Please select individual medical scan files (.dcm, .nii, .png, .jpg).");
+          continue;
+        }
+
         if (!isFileAccepted(file)) {
           rejectedTypeFiles.push(file.name);
           continue;
@@ -379,18 +403,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       }
 
       if (newFiles.length > 0) {
-        setFiles((prev) => {
-          const updated = [...prev, ...newFiles];
-          onFilesChange?.(updated.map((f) => f.file));
-          notifyValidation(updated);
-          return updated;
-        });
-
+        setFiles((prev) => [...prev, ...newFiles]);
         // Trigger AI validation for each uploaded file
         newFiles.forEach(validateFileWithAi);
       }
     },
-    [files.length, maxFiles, maxSizeMB, isFileAccepted, accept, onFilesChange, notifyValidation, validateFileWithAi]
+    [files.length, maxFiles, maxSizeMB, isFileAccepted, accept, validateFileWithAi]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -434,13 +452,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         if (fileToRemove?.previewUrl) {
           URL.revokeObjectURL(fileToRemove.previewUrl);
         }
-        const updated = prev.filter((f) => f.id !== id);
-        onFilesChange?.(updated.map((f) => f.file));
-        notifyValidation(updated);
-        return updated;
+        return prev.filter((f) => f.id !== id);
       });
     },
-    [onFilesChange, notifyValidation]
+    []
   );
 
   const formatFileSize = (bytes: number) => {

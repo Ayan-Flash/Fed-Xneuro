@@ -12,6 +12,7 @@ from backend.app.db.models.algorithm import Algorithm
 from backend.app.db.models.model import ModelEntity
 from backend.app.db.models.dataset import DatasetEntity
 from backend.app.db.models.project import Project
+from backend.app.db.models.assessment import AssessmentEntity
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "ModelEntity",
     "DatasetEntity",
     "Project",
+    "AssessmentEntity",
 ]

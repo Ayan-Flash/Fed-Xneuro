@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   IconPatients,
@@ -12,6 +12,7 @@ import {
   IconReports,
   IconChartBar,
 } from "@/components/Icons";
+import { fetchAssessmentHistory, SavedAssessmentRecord } from "@/lib/api";
 
 interface Patient {
   id: string;
@@ -26,37 +27,85 @@ interface Patient {
   cdr: string;
 }
 
-const PATIENTS: Patient[] = [
-  { id: "PAT-8492", name: "Robert Johnson", age: 72, gender: "Male", lastVisit: "Today", totalAssessments: 6, latestRisk: "High", trend: "declining", mmse: 21, cdr: "1.0" },
-  { id: "PAT-8491", name: "Sarah Mitchell", age: 65, gender: "Female", lastVisit: "Yesterday", totalAssessments: 4, latestRisk: "Low", trend: "stable", mmse: 28, cdr: "0" },
-  { id: "PAT-8490", name: "Michael Torres", age: 69, gender: "Male", lastVisit: "Yesterday", totalAssessments: 5, latestRisk: "Moderate", trend: "declining", mmse: 24, cdr: "0.5" },
-  { id: "PAT-8489", name: "Eleanor Williams", age: 61, gender: "Female", lastVisit: "Oct 12, 2026", totalAssessments: 3, latestRisk: "Low", trend: "improving", mmse: 29, cdr: "0" },
-  { id: "PAT-8488", name: "James Chen", age: 78, gender: "Male", lastVisit: "Oct 10, 2026", totalAssessments: 8, latestRisk: "High", trend: "declining", mmse: 18, cdr: "2.0" },
-  { id: "PAT-8487", name: "Patricia Davis", age: 67, gender: "Female", lastVisit: "Oct 8, 2026", totalAssessments: 2, latestRisk: "Moderate", trend: "stable", mmse: 25, cdr: "0.5" },
-  { id: "PAT-8486", name: "William Brown", age: 74, gender: "Male", lastVisit: "Oct 5, 2026", totalAssessments: 7, latestRisk: "Moderate", trend: "stable", mmse: 23, cdr: "1.0" },
-  { id: "PAT-8485", name: "Mary Anderson", age: 70, gender: "Female", lastVisit: "Sep 30, 2026", totalAssessments: 4, latestRisk: "Low", trend: "improving", mmse: 27, cdr: "0" },
-];
-
 export default function PatientHistoryPage() {
-  const [patients, setPatients] = useState<Patient[]>(PATIENTS);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "Low" | "Moderate" | "High">("all");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
 
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem("fedx_patients");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const ids = new Set(parsed.map((p: any) => p.id));
-          const rest = PATIENTS.filter((p) => !ids.has(p.id));
-          setPatients([...parsed, ...rest]);
+  useEffect(() => {
+    async function loadPatients() {
+      try {
+        setLoading(true);
+        const res = await fetchAssessmentHistory();
+        const records: SavedAssessmentRecord[] = res.records || [];
+
+        // Check local storage for any client assessments
+        let localRecords: any[] = [];
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem("fedx_patients");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (Array.isArray(parsed)) localRecords = parsed;
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
+
+        // Combine into unique patients map
+        const patientMap = new Map<string, Patient>();
+
+        // Process backend records
+        records.forEach((r) => {
+          const riskVal: "Low" | "Moderate" | "High" =
+            r.risk === "High" || r.risk === "Moderate" ? r.risk : "Low";
+          patientMap.set(r.id, {
+            id: r.id,
+            name: r.name || "Anonymous Patient",
+            age: r.age || 65,
+            gender: r.gender || "Unknown",
+            lastVisit: r.date || "Recent",
+            totalAssessments: 1,
+            latestRisk: riskVal,
+            trend: riskVal === "High" ? "declining" : riskVal === "Moderate" ? "stable" : "improving",
+            mmse: Number(r.mmse) || 24,
+            cdr: String(r.cdr || "0.5"),
+          });
+        });
+
+        // Merge local records
+        localRecords.forEach((lr) => {
+          if (!patientMap.has(lr.id)) {
+            const riskVal: "Low" | "Moderate" | "High" =
+              lr.risk === "High" || lr.risk === "Moderate" ? lr.risk : "Low";
+            patientMap.set(lr.id, {
+              id: lr.id,
+              name: lr.name || "Anonymous Patient",
+              age: lr.age || 65,
+              gender: lr.gender || "Unknown",
+              lastVisit: lr.date || lr.lastVisit || "Recent",
+              totalAssessments: lr.totalAssessments || 1,
+              latestRisk: lr.latestRisk || riskVal,
+              trend: lr.trend || (riskVal === "High" ? "declining" : "stable"),
+              mmse: Number(lr.mmse) || 24,
+              cdr: String(lr.cdr || "0.5"),
+            });
+          }
+        });
+
+        setPatients(Array.from(patientMap.values()));
+      } catch (err) {
+        console.error("Failed to load patients:", err);
+        setPatients([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error(e);
     }
+
+    loadPatients();
   }, []);
 
   const filtered = patients.filter((p) => {
@@ -81,7 +130,7 @@ export default function PatientHistoryPage() {
       `Last Assessment Date: ${patient.lastVisit}\n` +
       `Security Hash: SHA256-${Math.random().toString(36).substring(2, 12)}\n` +
       `=====================================\n` +
-      `Federated Multimodal Neuroimaging Model v2.4\n`;
+      `Federated Multimodal Neuroimaging Model\n`;
 
     const blob = new Blob([reportText], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -101,70 +150,102 @@ export default function PatientHistoryPage() {
   };
 
   const trendConfig = {
-    improving: { label: "↑ Improving", color: "text-emerald-600" },
-    stable: { label: "→ Stable", color: "text-gray-500" },
-    declining: { label: "↓ Declining", color: "text-rose-600" },
+    improving: { label: "Improving", color: "text-emerald-600" },
+    stable: { label: "Stable", color: "text-amber-600" },
+    declining: { label: "Declining", color: "text-rose-600" },
   };
+
+  const totalCount = patients.length;
+  const highRiskCount = patients.filter((p) => p.latestRisk === "High").length;
+  const modRiskCount = patients.filter((p) => p.latestRisk === "Moderate").length;
+  const lowRiskCount = patients.filter((p) => p.latestRisk === "Low").length;
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto animate-fade-in-up">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text-main)]">Patient History</h1>
-          <p className="text-gray-500 text-sm mt-1">Track cognitive assessments and risk trajectories across your patient cohort.</p>
+          <h1 className="text-2xl font-bold text-[var(--color-text-main)]">
+            Patient Longitudinal History
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Browse, search, and review clinical risk trajectories across your hospital cohort.
+          </p>
         </div>
         <Link
           href="/dashboard/hospital/assessment"
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-[var(--color-primary)] hover:bg-[var(--color-secondary)] rounded-xl shadow-md shadow-[var(--color-primary)]/20 hover:-translate-y-0.5 transition-all duration-200"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-[var(--color-primary)] hover:bg-[var(--color-secondary)] rounded-xl shadow-xs transition-all shrink-0"
         >
-          <IconBrain size={18} />
+          <IconBrain size={16} />
           <span>New Assessment</span>
         </Link>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 text-center hover:shadow-md transition-shadow">
-          <div className="text-2xl font-extrabold text-[var(--color-text-main)] font-mono">{patients.length}</div>
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-1">Total Patients</div>
+      {/* Cohort Overview Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+          <div className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Total Cohort</div>
+          <div className="text-2xl font-extrabold text-[var(--color-text-main)] font-mono mt-1">
+            {loading ? "-" : totalCount}
+          </div>
+          <div className="text-[11px] text-gray-400 mt-0.5">Active patients</div>
         </div>
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 text-center hover:shadow-md transition-shadow">
-          <div className="text-2xl font-extrabold text-emerald-600 font-mono">{patients.filter((p) => p.latestRisk === "Low").length}</div>
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-1">Low Risk</div>
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+          <div className="text-xs text-rose-600 font-semibold uppercase tracking-wider">High Risk</div>
+          <div className="text-2xl font-extrabold text-rose-600 font-mono mt-1">
+            {loading ? "-" : highRiskCount}
+          </div>
+          <div className="text-[11px] text-rose-600/70 mt-0.5">Urgent review</div>
         </div>
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 text-center hover:shadow-md transition-shadow">
-          <div className="text-2xl font-extrabold text-amber-600 font-mono">{patients.filter((p) => p.latestRisk === "Moderate").length}</div>
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-1">Moderate Risk</div>
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+          <div className="text-xs text-amber-600 font-semibold uppercase tracking-wider">Moderate Risk</div>
+          <div className="text-2xl font-extrabold text-amber-600 font-mono mt-1">
+            {loading ? "-" : modRiskCount}
+          </div>
+          <div className="text-[11px] text-amber-600/70 mt-0.5">Monitored</div>
         </div>
-        <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-4 text-center hover:shadow-md transition-shadow">
-          <div className="text-2xl font-extrabold text-rose-600 font-mono">{patients.filter((p) => p.latestRisk === "High").length}</div>
-          <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mt-1">High Risk</div>
+        <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+          <div className="text-xs text-emerald-600 font-semibold uppercase tracking-wider">Low Risk</div>
+          <div className="text-2xl font-extrabold text-emerald-600 font-mono mt-1">
+            {loading ? "-" : lowRiskCount}
+          </div>
+          <div className="text-[11px] text-emerald-600/70 mt-0.5">Stable</div>
         </div>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Patient List */}
+        {/* Main List */}
         <div className="flex-1">
           <div className="bg-white rounded-2xl shadow-xs border border-gray-100 overflow-hidden">
-            {/* Filters */}
-            <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3">
-              <input
-                type="text"
-                placeholder="Search patients by name or ID..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
-              />
-              <div className="flex gap-2">
-                {(["all", "Low", "Moderate", "High"] as const).map((r) => (
+            {/* Filter toolbar */}
+            <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-gray-50/50">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Search by patient name or ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] bg-white"
+                />
+                <svg
+                  className="w-4 h-4 text-gray-400 absolute left-3 top-2.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+
+              <div className="flex gap-1.5">
+                {(["all", "High", "Moderate", "Low"] as const).map((r) => (
                   <button
                     key={r}
                     onClick={() => setRiskFilter(r)}
-                    className={`px-3 py-2 text-xs font-semibold rounded-xl transition-all ${
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                       riskFilter === r
                         ? "bg-[var(--color-primary)] text-white shadow-xs"
-                        : "bg-gray-50 text-gray-600 hover:bg-gray-100"
+                        : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
                     }`}
                   >
                     {r === "all" ? "All" : r}
@@ -173,53 +254,76 @@ export default function PatientHistoryPage() {
               </div>
             </div>
 
-            {/* List */}
-            <div className="divide-y divide-gray-100">
-              {filtered.map((patient) => {
-                const risk = riskConfig[patient.latestRisk];
-                const trend = trendConfig[patient.trend];
-                const RiskIcon = risk.icon;
-                const isSelected = selectedPatient?.id === patient.id;
-
-                return (
-                  <div
-                    key={patient.id}
-                    onClick={() => setSelectedPatient(patient)}
-                    className={`px-5 py-4 flex items-center justify-between cursor-pointer transition-all group ${
-                      isSelected ? "bg-[var(--color-light-teal)]/50 border-l-4 border-l-[var(--color-primary)]" : "hover:bg-gray-50/70"
-                    }`}
+            {/* Patients List Body */}
+            {loading ? (
+              <div className="p-12 text-center text-sm text-gray-400">Loading patient records...</div>
+            ) : patients.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--color-light-teal)] text-[var(--color-primary)] flex items-center justify-center mx-auto mb-3">
+                  <IconPatients size={28} />
+                </div>
+                <h3 className="text-base font-bold text-[var(--color-text-main)]">No Patient Records Yet</h3>
+                <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">
+                  Your hospital cohort is currently empty. Patients will appear here once clinical assessments are performed.
+                </p>
+                <div className="mt-5">
+                  <Link
+                    href="/dashboard/hospital/assessment"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[var(--color-primary)] hover:bg-[var(--color-secondary)] text-white text-xs font-bold rounded-xl shadow-xs transition-all"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${risk.bg} ${risk.color} shrink-0 border ${risk.border} shadow-xs`}>
-                        <RiskIcon size={18} />
+                    <IconBrain size={16} />
+                    <span>Run First Assessment</span>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filtered.map((patient) => {
+                  const isSelected = selectedPatient?.id === patient.id;
+                  const risk = riskConfig[patient.latestRisk] || riskConfig.Low;
+                  const trend = trendConfig[patient.trend] || trendConfig.stable;
+                  const RiskIcon = risk.icon;
+
+                  return (
+                    <div
+                      key={patient.id}
+                      onClick={() => setSelectedPatient(patient)}
+                      className={`p-4 flex items-center justify-between cursor-pointer transition-colors ${
+                        isSelected ? "bg-[var(--color-light-teal)]/40 border-l-4 border-l-[var(--color-primary)]" : "hover:bg-gray-50/70"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${risk.bg} ${risk.color} shrink-0 border ${risk.border}`}>
+                          <RiskIcon size={18} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold text-[var(--color-text-main)] truncate flex items-center gap-2">
+                            <span>{patient.name}</span>
+                            <span className="text-xs text-gray-400 font-mono font-normal">{patient.id}</span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
+                            <span>Age {patient.age}</span>
+                            <span>•</span>
+                            <span>{patient.gender}</span>
+                            <span>•</span>
+                            <span>{patient.lastVisit}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-bold text-[var(--color-text-main)] flex items-center gap-2">
-                          <span>{patient.name}</span>
-                          <span className="text-xs text-gray-400 font-mono font-normal">{patient.id}</span>
-                        </div>
-                        <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-                          <span>Age {patient.age}</span>
-                          <span>•</span>
-                          <span>{patient.gender}</span>
-                          <span>•</span>
-                          <span>{patient.lastVisit}</span>
-                        </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className={`text-[11px] font-bold ${trend.color} hidden sm:inline`}>{trend.label}</span>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${risk.bg} ${risk.color} ${risk.border}`}>
+                          {patient.latestRisk}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className={`text-[11px] font-bold ${trend.color} hidden sm:inline`}>{trend.label}</span>
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${risk.bg} ${risk.color} ${risk.border}`}>
-                        {patient.latestRisk}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {filtered.length === 0 && (
-                <div className="px-5 py-12 text-center text-gray-400 text-sm">No patients found.</div>
-              )}
-            </div>
+                  );
+                })}
+                {filtered.length === 0 && patients.length > 0 && (
+                  <div className="px-5 py-12 text-center text-gray-400 text-sm">No matching patients found.</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -228,8 +332,8 @@ export default function PatientHistoryPage() {
           {selectedPatient ? (
             <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-6 sticky top-24 animate-fade-in-up">
               <div className="flex items-center gap-3 mb-5">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${riskConfig[selectedPatient.latestRisk].bg} ${riskConfig[selectedPatient.latestRisk].color} border ${riskConfig[selectedPatient.latestRisk].border}`}>
-                  {React.createElement(riskConfig[selectedPatient.latestRisk].icon, { size: 24 })}
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${riskConfig[selectedPatient.latestRisk]?.bg || "bg-gray-50"} ${riskConfig[selectedPatient.latestRisk]?.color || "text-gray-600"} border ${riskConfig[selectedPatient.latestRisk]?.border || "border-gray-200"}`}>
+                  {React.createElement(riskConfig[selectedPatient.latestRisk]?.icon || IconRiskLow, { size: 24 })}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-[var(--color-text-main)]">{selectedPatient.name}</h3>
@@ -255,7 +359,9 @@ export default function PatientHistoryPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Cognitive Trend</span>
-                  <span className={`font-bold ${trendConfig[selectedPatient.trend].color}`}>{trendConfig[selectedPatient.trend].label}</span>
+                  <span className={`font-bold ${trendConfig[selectedPatient.trend]?.color || "text-gray-600"}`}>
+                    {trendConfig[selectedPatient.trend]?.label || "Stable"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Last Assessment</span>
@@ -263,34 +369,9 @@ export default function PatientHistoryPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-500">Current Risk Level</span>
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${riskConfig[selectedPatient.latestRisk].bg} ${riskConfig[selectedPatient.latestRisk].color} ${riskConfig[selectedPatient.latestRisk].border}`}>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border ${riskConfig[selectedPatient.latestRisk]?.bg || "bg-gray-50"} ${riskConfig[selectedPatient.latestRisk]?.color || "text-gray-600"} ${riskConfig[selectedPatient.latestRisk]?.border || "border-gray-200"}`}>
                     {selectedPatient.latestRisk} Risk
                   </span>
-                </div>
-              </div>
-
-              {/* Mini Cognitive Timeline */}
-              <div className="mb-5">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <IconHistory size={13} />
-                  Assessment Timeline
-                </h4>
-                <div className="relative border-l-2 border-gray-100 pl-4 space-y-3 ml-1">
-                  {[
-                    { date: selectedPatient.lastVisit, mmse: selectedPatient.mmse, risk: selectedPatient.latestRisk },
-                    { date: "3 months ago", mmse: selectedPatient.mmse + 2, risk: selectedPatient.latestRisk === "High" ? "Moderate" as const : selectedPatient.latestRisk },
-                    { date: "6 months ago", mmse: Math.min(selectedPatient.mmse + 4, 30), risk: "Low" as const },
-                  ].map((entry, i) => (
-                    <div key={i} className="relative">
-                      <div className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-white ring-2 ${
-                        riskConfig[entry.risk].bg.replace("bg-", "bg-")
-                      } ${riskConfig[entry.risk].color.replace("text-", "ring-")}`} />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-gray-500">{entry.date}</span>
-                        <span className="text-[11px] font-mono font-bold text-[var(--color-text-main)]">MMSE: {entry.mmse}</span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
 

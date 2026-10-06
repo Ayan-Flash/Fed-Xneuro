@@ -1,0 +1,10 @@
+{
+  "name": "fed-xneuro-backend",
+  "version": "1.0.0",
+  "description": "Fed-XNeuro FastAPI Backend Service",
+  "scripts": {
+    "start": "python -m uvicorn --app-dir .. backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev": "python -m uvicorn --app-dir .. backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "test": "python -m pytest tests/ -v"
+  }
+}
