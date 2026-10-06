@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { 
@@ -16,8 +16,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
+  const [currentUser, setCurrentUser] = useState<{ full_name?: string; email?: string } | null>(null);
+
   const role = pathname?.includes("/admin") ? "admin" : "hospital";
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("fedx_user");
+      if (stored) {
+        setCurrentUser(JSON.parse(stored));
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
 
   const adminLinks = [
     { name: "Overview", href: "/dashboard/admin", icon: IconAdmin },
@@ -36,8 +48,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const links = role === "admin" ? adminLinks : hospitalLinks;
 
   const handleLogout = () => {
+    try {
+      localStorage.removeItem("fedx_token");
+      localStorage.removeItem("fedx_user");
+      localStorage.removeItem("fedx_role");
+    } catch {}
     router.push("/login");
   };
+
+  const displayName = currentUser?.full_name || (role === "admin" ? "Alex Rivera (Admin)" : "Dr. Sarah Chen, MD");
+  const displayOrg = role === "admin" ? "Fed-XNeuro Central Server" : "Memorial Neuroscience Center";
+  const initials = displayName
+    .replace(/Dr\.\s*/i, "")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || (role === "admin" ? "AR" : "SC");
 
   return (
     <div className="flex h-screen bg-[var(--color-bg)] overflow-hidden font-sans">
@@ -93,14 +121,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="mt-auto px-5 py-4 border-t border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-3 mb-3 px-1">
             <div className="w-9 h-9 rounded-full bg-[var(--color-light-teal)] text-[var(--color-primary)] font-bold text-xs flex items-center justify-center border border-[var(--color-primary)]/20 shadow-xs">
-              {role === "admin" ? "AD" : "SJ"}
+              {initials}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-gray-800 truncate">
-                {role === "admin" ? "Admin Operator" : "Dr. Sarah Jenkins"}
+                {displayName}
               </p>
               <p className="text-[11px] text-gray-500 truncate">
-                {role === "admin" ? "Core Node #01" : "St. Jude Neuroscience"}
+                {displayOrg}
               </p>
             </div>
           </div>

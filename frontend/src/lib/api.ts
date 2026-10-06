@@ -310,3 +310,55 @@ export async function uploadAssessmentDocument(
 
   return res.json();
 }
+
+export interface UserProfile {
+  id: number;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  created_at?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user?: UserProfile;
+}
+
+export async function loginUser(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || `Authentication failed (status ${res.status})`);
+  }
+
+  const data: AuthResponse = await res.json();
+
+  try {
+    const userRes = await fetch(`${API_BASE}/users/me`, {
+      headers: { Authorization: `Bearer ${data.access_token}` },
+    });
+    if (userRes.ok) {
+      data.user = await userRes.json();
+    }
+  } catch {
+    // Non-fatal if /users/me query fails
+  }
+
+  return data;
+}
+
+export async function checkBackendHealth(): Promise<{ status: string; service: string }> {
+  const host = API_BASE.replace(/\/api\/v1$/, "");
+  const res = await fetch(`${host}/health`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Health check failed (${res.status})`);
+  }
+  return res.json();
+}
