@@ -17,14 +17,13 @@ import { fetchAssessmentHistory, SavedAssessmentRecord } from "@/lib/api";
 interface Patient {
   id: string;
   name: string;
-  age: number;
-  gender: string;
   lastVisit: string;
   totalAssessments: number;
   latestRisk: "Low" | "Moderate" | "High";
   trend: "improving" | "stable" | "declining";
   mmse: number;
   cdr: string;
+  imagingFile?: string | null;
 }
 
 export default function PatientHistoryPage() {
@@ -41,14 +40,21 @@ export default function PatientHistoryPage() {
         const res = await fetchAssessmentHistory();
         const records: SavedAssessmentRecord[] = res.records || [];
 
-        // Check local storage for any client assessments
+        // Check local storage for any client assessments and strip any legacy random age
         let localRecords: any[] = [];
         if (typeof window !== "undefined") {
           try {
             const stored = localStorage.getItem("fedx_patients");
             if (stored) {
               const parsed = JSON.parse(stored);
-              if (Array.isArray(parsed)) localRecords = parsed;
+              if (Array.isArray(parsed)) {
+                localRecords = parsed.map((p: any) => {
+                  const { age, gender, ...rest } = p;
+                  return rest;
+                });
+                // Overwrite localStorage without any random age
+                localStorage.setItem("fedx_patients", JSON.stringify(localRecords));
+              }
             }
           } catch (e) {
             console.error(e);
@@ -65,14 +71,13 @@ export default function PatientHistoryPage() {
           patientMap.set(r.id, {
             id: r.id,
             name: r.name || "Anonymous Patient",
-            age: r.age || 65,
-            gender: r.gender || "Unknown",
             lastVisit: r.date || "Recent",
             totalAssessments: 1,
             latestRisk: riskVal,
             trend: riskVal === "High" ? "declining" : riskVal === "Moderate" ? "stable" : "improving",
             mmse: Number(r.mmse) || 24,
             cdr: String(r.cdr || "0.5"),
+            imagingFile: r.document_name,
           });
         });
 
@@ -84,14 +89,13 @@ export default function PatientHistoryPage() {
             patientMap.set(lr.id, {
               id: lr.id,
               name: lr.name || "Anonymous Patient",
-              age: lr.age || 65,
-              gender: lr.gender || "Unknown",
               lastVisit: lr.date || lr.lastVisit || "Recent",
               totalAssessments: lr.totalAssessments || 1,
               latestRisk: lr.latestRisk || riskVal,
               trend: lr.trend || (riskVal === "High" ? "declining" : "stable"),
               mmse: Number(lr.mmse) || 24,
               cdr: String(lr.cdr || "0.5"),
+              imagingFile: lr.imagingFile,
             });
           }
         });
@@ -121,13 +125,13 @@ export default function PatientHistoryPage() {
       `=====================================\n` +
       `Patient ID: ${patient.id}\n` +
       `Full Name: ${patient.name}\n` +
-      `Age: ${patient.age} | Gender: ${patient.gender}\n` +
       `Assessed Risk Level: ${patient.latestRisk} Risk\n` +
       `Cognitive Trend: ${patient.trend.toUpperCase()}\n` +
       `MMSE Score: ${patient.mmse} / 30\n` +
       `Clinical Dementia Rating (CDR): ${patient.cdr}\n` +
       `Total Assessments: ${patient.totalAssessments}\n` +
       `Last Assessment Date: ${patient.lastVisit}\n` +
+      (patient.imagingFile ? `Neuroimaging Scan: ${patient.imagingFile}\n` : "") +
       `Security Hash: SHA256-${Math.random().toString(36).substring(2, 12)}\n` +
       `=====================================\n` +
       `Federated Multimodal Neuroimaging Model\n`;
@@ -302,11 +306,15 @@ export default function PatientHistoryPage() {
                             <span className="text-xs text-gray-400 font-mono font-normal">{patient.id}</span>
                           </div>
                           <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-                            <span>Age {patient.age}</span>
-                            <span>•</span>
-                            <span>{patient.gender}</span>
-                            <span>•</span>
                             <span>{patient.lastVisit}</span>
+                            {patient.imagingFile && (
+                              <>
+                                <span>•</span>
+                                <span className="font-mono text-[11px] text-gray-400 truncate max-w-[220px]">
+                                  {patient.imagingFile}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -337,7 +345,7 @@ export default function PatientHistoryPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-[var(--color-text-main)]">{selectedPatient.name}</h3>
-                  <p className="text-xs text-gray-500 font-mono">{selectedPatient.id} • Age {selectedPatient.age} • {selectedPatient.gender}</p>
+                  <p className="text-xs text-gray-500 font-mono">{selectedPatient.id} • {selectedPatient.lastVisit}</p>
                 </div>
               </div>
 

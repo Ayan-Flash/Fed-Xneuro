@@ -226,8 +226,8 @@ export interface ScanValidationResponse {
 export interface AssessmentPredictionRequest {
   patient_id: string;
   patient_name?: string;
-  age: number;
-  gender: string;
+  age?: number;
+  gender?: string;
   education_years?: number;
   mmse: number;
   cdr: number;
@@ -243,7 +243,11 @@ export interface AssessmentPredictionResponse {
   model_badge?: string;
   architecture_type?: string;
   model_source_file?: string;
+  disease_name?: string;
+  disease_stage?: string;
+  disease_code?: string;
   risk_level: "Low" | "Moderate" | "High";
+  risk_percentage?: number;
   progression_probability: number;
   confidence: number;
   has_multimodal_imaging: boolean;
@@ -259,6 +263,8 @@ export interface AssessmentPredictionResponse {
     modality: string;
     confidence: number;
     biomarkers: Record<string, any>;
+    disease_name?: string;
+    disease_stage?: string;
   };
 }
 
@@ -427,8 +433,8 @@ export async function rescanModelFiles(): Promise<ModelFileInfo[]> {
 export interface SavedAssessmentRecord {
   id: string;
   name: string;
-  age: number;
-  gender: string;
+  age?: number | null;
+  gender?: string | null;
   education_years?: number;
   mmse: number;
   cdr: number | string;
